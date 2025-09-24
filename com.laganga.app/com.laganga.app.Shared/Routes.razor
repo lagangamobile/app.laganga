@@ -1,0 +1,36 @@
+﻿@using Microsoft.AspNetCore.Components.Routing
+@using com.laganga.app.Shared.Services
+@inject IAuthenticationService AuthService
+@inject NavigationManager NavigationManager
+
+<Router AppAssembly="typeof(Layout.MainLayout).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="@typeof(Layout.MainLayout)">
+            <p role="alert">Sorry, there's nothing at this address.</p>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        // Verifica si la sesión está activa
+        if (AuthService.IsAuthenticated)
+        {
+            // Si el usuario ya tiene una sesión, lo redirige a la página principal
+            NavigationManager.NavigateTo("/");
+        }
+        else
+        {
+            // Si no tiene sesión, lo redirige a la página de login
+            NavigationManager.NavigateTo("/login");
+        }
+
+        await Task.CompletedTask;
+    }
+}

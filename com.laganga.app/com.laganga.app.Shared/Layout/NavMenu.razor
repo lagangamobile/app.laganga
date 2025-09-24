@@ -1,0 +1,82 @@
+﻿@using com.laganga.app.Shared.Services
+@inject IAuthenticationService AuthService
+@inject NavigationManager NavigationManager
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        @if (AuthService.IsAuthenticated && !string.IsNullOrEmpty(AuthService.CurrentUser.FindFirst("nickname")?.Value))
+        {
+            <span class="navbar-text ms-3">Bienvenido, <strong>@AuthService.CurrentUser.FindFirst("nickname")?.Value</strong></span>
+        }
+        else
+        {
+            <a class="navbar-brand" href="">com.laganga.app</a>
+        }
+    </div>
+</div>
+
+
+
+
+@if (AuthService.IsAuthenticated)
+{
+    <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+    <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+        <nav class="flex-column">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="counter">
+                    <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="weather">
+                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <a class="nav-link" href="#" @onclick="HandleLogout" @onclick:preventDefault>
+                    <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Logout
+                </a>
+            </div>
+        </nav>
+    </div>
+    }
+        @* else
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="login">
+                    <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login
+                </NavLink>
+            </div>
+        } *@
+
+
+@code {
+    protected override void OnInitialized()
+    {
+        AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+    private void OnAuthenticationStateChanged()
+    {
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        AuthService.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+    }
+
+    private async void HandleLogout()
+    {
+        await AuthService.LogoutAsync();
+        NavigationManager.NavigateTo("/login");
+    }
+}

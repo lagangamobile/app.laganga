@@ -1,0 +1,96 @@
+@page "/login"
+@using com.laganga.app.Shared.Services
+@inject NavigationManager NavigationManager
+@inject IAuthenticationService AuthService
+
+<div class="login-container">
+    <div class="login-box">
+        <h3 class="mb-4">Login</h3>
+
+        @if (!string.IsNullOrEmpty(error))
+        {
+            <div class="alert alert-danger">
+                @error
+            </div>
+        }
+
+        <button class="btn btn-primary w-100" @onclick="HandleLogin" disabled="@isLoading">
+            @if (isLoading)
+            {
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span class="ms-2">Logging in...</span>
+            }
+            else
+            {
+                <span>Login with Browser/Social</span>
+            }
+        </button>
+    </div>
+</div>
+
+<style>
+    .login-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        padding: 1rem;
+        background-color: #f8f9fa;
+    }
+
+    .login-box {
+        width: 100%;
+        max-width: 400px;
+        padding: 2rem;
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    }
+
+    @@media (max-width: 576px) {
+        .login-box
+
+    {
+        box-shadow: none;
+        background-color: transparent;
+        padding: 1rem;
+    }
+
+    }
+</style>
+
+@code {
+    private string? error;
+    private bool isLoading;
+
+    private async Task HandleLogin()
+    {
+        error = null;
+        isLoading = true;
+
+        try
+        {
+            // Llama al método de login de tu servicio de autenticación
+            await AuthService.LoginAsync();
+
+            if (AuthService.IsAuthenticated)
+            {
+                // Redirigir a la página principal después del login exitoso
+                NavigationManager.NavigateTo("/");
+            }
+            else
+            {
+                // Si no está autenticado, maneja el error aquí (por ejemplo, mostrando un mensaje)
+                error = "Login failed: No authentication token received.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
