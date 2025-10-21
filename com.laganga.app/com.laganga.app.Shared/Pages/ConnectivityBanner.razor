@@ -1,0 +1,28 @@
+@inject com.laganga.app.Shared.Services.NetworkStatusService Net
+
+@if (!Net.IsOnline)
+{
+    <div class="conn-banner offline"><span class="bi bi-wifi-off"></span> Sin conexión a Internet.</div>
+}
+else if (!string.IsNullOrWhiteSpace(Net.LastApiErrorMessage))
+{
+    <div class="conn-banner degraded"><span class="bi bi-exclamation-triangle"></span> @Net.LastApiErrorMessage</div>
+}
+
+@code {
+    protected override void OnInitialized() => Net.StatusChanged += OnChange;
+    void OnChange() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Net.StatusChanged -= OnChange;
+}
+
+<style>
+.conn-banner {
+    padding:.5rem .75rem;
+    font-size:.8rem;
+    display:flex;
+    align-items:center;
+    gap:.5rem;
+}
+.offline { background:#842029; color:#fff; }
+.degraded { background:#664d03; color:#fff; }
+</style>

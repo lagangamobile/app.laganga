@@ -2,6 +2,7 @@
 @using com.laganga.app.Shared.Services
 @inject IAuthenticationService AuthService
 @inject NavigationManager NavigationManager
+@DxResourceManager.RegisterTheme(Themes.Fluent)
 
 <Router AppAssembly="typeof(Layout.MainLayout).Assembly">
     <Found Context="routeData">
@@ -19,18 +20,37 @@
 @code {
     protected override async Task OnInitializedAsync()
     {
-        // Verifica si la sesión está activa
+        HandleAuthenticationRedirect();
+        AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        await Task.CompletedTask;
+    }
+
+    private void HandleAuthenticationRedirect()
+    {
         if (AuthService.IsAuthenticated)
         {
-            // Si el usuario ya tiene una sesión, lo redirige a la página principal
-            NavigationManager.NavigateTo("/");
+            if (NavigationManager.Uri.EndsWith("/login", StringComparison.OrdinalIgnoreCase))
+            {
+                NavigationManager.NavigateTo("/", replace: true);
+            }
         }
         else
         {
-            // Si no tiene sesión, lo redirige a la página de login
-            NavigationManager.NavigateTo("/login");
+            if (!NavigationManager.Uri.EndsWith("/login", StringComparison.OrdinalIgnoreCase))
+            {
+                NavigationManager.NavigateTo("/login", forceLoad: true, replace: true);
+            }
         }
+    }
 
-        await Task.CompletedTask;
+    private void OnAuthenticationStateChanged()
+    {
+        HandleAuthenticationRedirect();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        AuthService.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     }
 }

@@ -1,65 +1,72 @@
 ﻿@using com.laganga.app.Shared.Services
 @inject IAuthenticationService AuthService
+@inject ParameterService ParamService
 @inject NavigationManager NavigationManager
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        @if (AuthService.IsAuthenticated && !string.IsNullOrEmpty(AuthService.CurrentUser.FindFirst("nickname")?.Value))
-        {
-            <span class="navbar-text ms-3">Bienvenido, <strong>@AuthService.CurrentUser.FindFirst("nickname")?.Value</strong></span>
-        }
-        else
-        {
-            <a class="navbar-brand" href="">com.laganga.app</a>
-        }
-    </div>
+
+<div class="dx-menu-container">
+    @if (AuthService.IsAuthenticated)
+    {
+        <DxMenu Title="@currentUserNickname"
+                Orientation="@Orientation.Horizontal"
+                DisplayMode="@MenuDisplayMode.Auto"
+                CollapseItemsToHamburgerMenu="true"
+                CssClass="main-navigation-menu"
+                ItemCssClass="nav-menu-item"
+                >
+            <Items>
+                <DxMenuItem NavigateUrl="/"
+                            Text="Home"
+                            IconCssClass="bi bi-house-door-fill" />
+
+                <DxMenuItem Text="Ingreso de Mercadería"
+                            IconCssClass="bi bi-box-seam">
+                    <Items>
+                        <DxMenuItem NavigateUrl="/Bodega/IngresoOrdenCompra"
+                                    Text="Orden de Compra"
+                                    IconCssClass="bi bi-file-text" />
+                        <DxMenuItem NavigateUrl="/Bodega/IngresoOrdenConsignada"
+                                    Text="Orden de Consignación"
+                                    IconCssClass="bi bi-file-earmark-text" />
+                        <DxMenuItem NavigateUrl="/Bodega/IngresoOrden"
+                                    Text="Sin Origen"
+                                    IconCssClass="bi bi-file-plus" />
+                    </Items>
+                </DxMenuItem>
+                <DxMenuItem Text="Egreso de Mercadería"
+                            IconCssClass="bi bi-box-seam">
+                    <Items>
+                        <DxMenuItem Text="Origen de Bodega"
+                                    IconCssClass="bi bi-file-text"
+                                    NavigateUrl="/Bodega/EgresoComprobante?tipoPantalla=OrigenBodega" />
+                        <DxMenuItem Text="Origen de Sucursal"
+                                    IconCssClass="bi bi-file-earmark-text"
+                                    NavigateUrl="/Bodega/EgresoComprobante?tipoPantalla=OrigenSucursal" />
+                    </Items>
+                </DxMenuItem>
+                <DxMenuItem NavigateUrl="/pistoleoId"
+                            Text="Generar ID Pistoleo"
+                            IconCssClass="bi bi-qr-code" />
+
+                <DxMenuItem Text="Logout"
+                            IconCssClass="bi bi-box-arrow-right"
+                            @onclick="HandleLogout" />
+            </Items>
+        </DxMenu>
+    }
+    else
+    {
+        <div class="top-row ps-3 navbar navbar-dark">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="">La Ganga</a>
+            </div>
+        </div>
+    }
 </div>
 
-
-
-
-@if (AuthService.IsAuthenticated)
-{
-    <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
-    <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-        <nav class="flex-column">
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                    <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="counter">
-                    <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="weather">
-                    <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-                </NavLink>
-            </div>
-
-            <div class="nav-item px-3">
-                <a class="nav-link" href="#" @onclick="HandleLogout" @onclick:preventDefault>
-                    <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Logout
-                </a>
-            </div>
-        </nav>
-    </div>
-    }
-        @* else
-        {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="login">
-                    <span class="bi bi-box-arrow-in-right" aria-hidden="true"></span> Login
-                </NavLink>
-            </div>
-        } *@
-
-
 @code {
+    private string currentUserNickname => AuthService.CurrentUser?.FindFirst("nickname")?.Value ?? "La Ganga";
+
     protected override void OnInitialized()
     {
         AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
@@ -76,7 +83,8 @@
 
     private async void HandleLogout()
     {
+        
         await AuthService.LogoutAsync();
-        NavigationManager.NavigateTo("/login");
+        NavigationManager.NavigateTo("/login", replace: true);
     }
 }

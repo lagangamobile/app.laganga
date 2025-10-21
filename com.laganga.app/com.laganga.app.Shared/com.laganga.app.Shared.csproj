@@ -7,14 +7,30 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Models\OrigenEgresoItem.cs" />
+    <Compile Remove="Models\ProductoItem.cs" />
+    <Compile Remove="Services\AuthenticationService.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <SupportedPlatform Include="browser" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Blazored.SessionStorage" Version="2.4.0" />
+    <PackageReference Include="DevExpress.Blazor" Version="25.1.5" />
+    <PackageReference Include="DevExpress.Blazor.Themes" Version="25.1.5" />
+    <PackageReference Include="DevExpress.Blazor.Themes.Fluent" Version="25.1.5" />
     <PackageReference Include="Duende.IdentityModel.OidcClient" Version="6.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="9.0.9" />
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.9" />
     <PackageReference Include="Microsoft.Maui.Essentials" Version="9.0.110" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="wwwroot\css\" />
+  </ItemGroup>
+
 
 </Project>

@@ -9,20 +9,18 @@
 
         @if (!string.IsNullOrEmpty(error))
         {
-            <div class="alert alert-danger">
-                @error
-            </div>
+            <div class="alert alert-danger">@error</div>
         }
 
         <button class="btn btn-primary w-100" @onclick="HandleLogin" disabled="@isLoading">
             @if (isLoading)
             {
-                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                <span class="ms-2">Logging in...</span>
+                <span class="spinner-border spinner-border-sm" role="status"></span>
+                <span class="ms-2">Autenticando...</span>
             }
             else
             {
-                <span>Login with Browser/Social</span>
+                <span>Login con Navegador/Social</span>
             }
         </button>
     </div>
@@ -48,14 +46,11 @@
     }
 
     @@media (max-width: 576px) {
-        .login-box
-
-    {
-        box-shadow: none;
-        background-color: transparent;
-        padding: 1rem;
-    }
-
+        .login-box {
+            box-shadow: none;
+            background-color: transparent;
+            padding: 1rem;
+        }
     }
 </style>
 
@@ -74,19 +69,18 @@
             await AuthService.LoginAsync();
 
             if (AuthService.IsAuthenticated)
-            {
-                // Redirigir a la página principal después del login exitoso
-                NavigationManager.NavigateTo("/");
-            }
+                NavigationManager.NavigateTo("/", replace: true);
             else
-            {
-                // Si no está autenticado, maneja el error aquí (por ejemplo, mostrando un mensaje)
-                error = "Login failed: No authentication token received.";
-            }
+                error = "No se recibió token de autenticación.";
+        }
+        catch (NetworkUnavailableException nex)
+        {
+            // Si no está autenticado, maneja el error aquí (por ejemplo, mostrando un mensaje)
+            error = nex.Message;
         }
         catch (Exception ex)
         {
-            error = ex.Message;
+            error = "Error: " + ex.Message;
         }
         finally
         {

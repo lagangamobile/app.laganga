@@ -1,0 +1,1407 @@
+﻿@page "/Bodega/EgresoComprobanteDetalle/{guid}"
+@using System.Net.Http.Json
+@using com.laganga.app.Shared.Models
+@using com.laganga.app.Shared.Services
+@using DevExpress.Blazor
+@inject IHttpClientFactory HttpClientFactory
+@inject IAuthenticationService AuthService
+@inject Blazored.SessionStorage.ISessionStorageService SessionStorage
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+
+@if (isLoading)
+{
+    <h3 class="page-title">Egreso Comprobante - Detalle</h3>
+
+    <div class="status-block info">Cargando información...</div>
+}
+else if (!string.IsNullOrEmpty(loadError))
+{
+    <h3 class="page-title">Egreso Comprobante - Detalle</h3>
+
+    <div class="status-block error">@loadError</div>
+}
+else if (item == null)
+{
+    <h3 class="page-title">Egreso Comprobante - Detalle</h3>
+
+    <div class="status-block warn">No se encontró información para la secuencia.</div>
+}
+else
+{
+    <h3 class="page-title">@($"Despacho {GetTipoName()}: {item!.IdentificadorOrigenVisible}")</h3>
+
+    <div class="detalle-root">
+
+        <!-- Sentinel para detectar colapso (para sticky) -->
+        <div id="stickySentinel" class="sticky-sentinel" aria-hidden="true"></div>
+
+        <!-- Encabezado fijo (se colapsa con clase .compact) -->
+        <div class="top-header">
+            @* <div class="id-box">
+                <label>@($"{GetTipoName()}: {item!.IdentificadorOrigenVisible}")</label>
+            </div> *@
+            <div class="progress-box">
+                <div class="progress-info">
+                    <span>Productos: <strong>@TotalProductosIngresados</strong>/<strong>@TotalProductos</strong></span>
+                    <span class="small muted">(@ProgressPercent.ToString("0")%)</span>
+                </div>
+                <div class="progress-bar-outer">
+                    <div class="progress-bar-inner" style="width:@($"{ProgressPercent}%")"></div>
+                </div>
+            </div>
+            <div class="actions-inline">
+                <DxButton Text="Regresar"
+                          ButtonType="ButtonType.Normal"
+                          Click='() => Nav.NavigateTo("/Bodega/EgresoComprobante", true)' />
+                <DxButton Text="Finalizar"
+                          CssClass="finalize"
+                          Enabled="@CanFinalize()"
+                          Click="() => showFinalizeConfirm = true" />
+            </div>
+        </div>
+
+        <!-- Comprobantes: tarjetas horizontales (sticky bajo el header) -->
+        <div class="comprobantes-wrapper">
+            <div class="comprobantes-strip" role="tablist" aria-label="Comprobantes">
+                @foreach (var key in groupKeys)
+                {
+                    var comp = groupedComprobantes[key].First();
+                    var (cap, exp) = GetCompProgress(key);
+                    <button type="button"
+                            class="comp-card @(selectedCompte == key ? "selected" : "")"
+                            role="tab"
+                            aria-selected="@(selectedCompte == key ? "true" : "false")"
+                            @onclick="() => SeleccionarCompte(key)">
+                        <div class="comp-row">
+                            <div class="comp-num">#@comp.NumCompte</div>
+                            <div class="comp-bod">@($"Bod: {comp.Bodega}")</div>
+                        </div>
+                        @* <div class="comp-row">
+                            <div class="comp-date">@comp.Fecha:dd/MM/yyyy</div>
+                        </div> *@
+                        <div class="comp-progress">
+                            <div class="rail">
+                                <div class="fill" style="width:@(exp == 0 ? "0%" : $"{Math.Min(100, (int)((double)cap / exp * 100))}%")"></div>
+                            </div>
+                            <div class="meta">@cap/@exp</div>
+                        </div>
+                        @if (selectedCompte == key)
+                        {
+                            <div class="chip-current">En captura</div>
+                        }
+                    </button>
+                }
+            </div>
+        </div>
+
+        <!-- Banner de comprobante seleccionado -->
+        @if (!string.IsNullOrWhiteSpace(selectedCompte) && 1 == 0)
+        {
+            <div class="selected-comp-banner">
+                <span class="label">Comprobante seleccionado:</span>
+                <span class="value">NumCompte: @selectedNumCompte • Bodega: @selectedBodega</span>
+            </div>
+        }
+
+        <!-- Grid de detalles del comprobante seleccionado -->
+        @{
+            var compSel = (!string.IsNullOrWhiteSpace(selectedCompte) && groupedComprobantes.TryGetValue(selectedCompte, out var listSel))
+            ? listSel.FirstOrDefault()
+            : null;
+        }
+        @if (compSel != null)
+        {
+            <details class="accordion-panel" id="detallesAccordion">
+                <summary class="accordion-summary">
+                    Detalles del comprobante (@(compSel.Detalles?.Sum(d => d.CantidadIngresada) ?? 0)/@(compSel.Detalles?.Sum(d => d.Cantidad) ?? 0))
+                </summary>
+                <div class="accordion-content">
+                    <DxGrid Data="compSel.Detalles"
+                            T="DetalleMovimiento"
+                            ShowFilterRow="false"
+                            ShowGroupPanel="false"
+                            ShowPager="false"
+                            KeyboardNavigationEnabled="true"
+                            RowClick="OnDetalleRowClick"
+                            CssClass="detalles-grid"
+                            ColumnResizeMode="GridColumnResizeMode.Disabled"
+                            SizeMode="SizeMode.Small"
+                            PageSize="5">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(DetalleMovimiento.CodigoItem)" Caption="Artículo" Width="85px" />
+                            <DxGridDataColumn FieldName="@nameof(DetalleMovimiento.Descripcion)" Caption="Descripción" />
+                            <DxGridDataColumn FieldName="@nameof(DetalleMovimiento.Cantidad)" Caption="Cant" Width="40px" />
+                            <DxGridDataColumn FieldName="@nameof(DetalleMovimiento.CantidadIngresada)" Caption="Ing" Width="40px" />
+                        </Columns>
+                    </DxGrid>
+                </div>
+            </details>
+        }
+
+        <!-- Panel de Captura -->
+        <div class="capture-panel">
+            <div class="section-title">Captura</div>
+            <div class="responsive-grid">
+                <DxTextBox LabelText="Código"
+                           Id="txtCodigoCaptura"
+                           CssClass="@(codigoValido ? "valid" : null)"
+                           ValidationEnabled="true"
+                           ShowValidationSuccessState="@codigoValido"
+                           @ref="txtCodigoCapturaRef"
+                           @bind-Text="codigoItemIngresado"
+                           InputType="InputType.Text"
+                           SizeMode="SizeMode.Small"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                           ReadOnly="false"
+                           @onkeydown="HandleCodigoItemCaptura"
+                           NullText="Escanear / escribir código">
+                </DxTextBox>
+
+                <!-- Artículo: reemplazado por chip compacta -->
+                <div class="field-compact" style='@(!codigoValido ? "display: none;" : "")'>
+                    @* <div class="field-label">Artículo</div> *@
+                    <div class="chip article-chip" title="@articuloDescripcion">
+                        @(string.IsNullOrWhiteSpace(articuloDescripcion) ? "—" : articuloDescripcion)
+                    </div>
+                </div>
+
+                <DxTextBox LabelText="Serie"
+                           Id="txtSerieCaptura"
+                           @ref="txtSerieCapturaRef"
+                           @bind-Text="serieIngresada"
+                           InputType="InputType.Text"
+                           SizeMode="SizeMode.Small"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                           ReadOnly="false"
+                           NullText="Escanear serie"
+                           @onkeydown="HandleSerieCaptura" />
+            </div>
+
+            <div class="capture-actions">
+                <DxButton Text="Ingresar Serie"
+                          Enabled="@(selectedDetalle != null && !string.IsNullOrWhiteSpace(serieIngresada))"
+                          Click="IngresarSerie" />
+                <DxButton Text="Limpiar"
+                          ButtonType="ButtonType.Normal"
+                          Click="ResetCapturaActual" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(productoNoEncontradoMessage))
+            {
+                <div class="status-inline warn">@productoNoEncontradoMessage</div>
+            }
+
+            @if (selectedDetalle != null)
+            {
+                <div class="series-wrapper">
+                    <div class="series-header">
+                        Series capturadas (@selectedDetalle.SeriesCapturadas.Count):
+                        <span class="small muted">
+                            Esperadas: @ExpectedSeriesFor(selectedDetalle)
+                        </span>
+                    </div>
+                    <div class="series-chips">
+                        @foreach (var s in selectedDetalle.SeriesCapturadas)
+                        {
+                            <span class="chip">
+                                @s
+                                <button type="button" class="chip-remove" @onclick="() => RemoveSerie(s)">×</button>
+                            </span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @* <div class="footer-space"></div> *@
+    </div>
+}
+
+<!-- Popup Finalizar -->
+<DxPopup @bind-Visible="showFinalizeConfirm"
+         Width="340px"
+         CloseOnOutsideClick="true"
+         ShowCloseButton="true"
+         ShowFooter="false">
+    <HeaderTemplate>Confirmar envío</HeaderTemplate>
+    <BodyTemplate>
+        <div class="confirm-body">
+            <p>Se enviará la información capturada. ¿Desea continuar?</p>
+            <ul class="mini-list">
+                <li>Total productos ingresados: <strong>@TotalProductosIngresados</strong></li>
+                <li>Total productos: <strong>@TotalProductos</strong></li>
+                <li>Progreso: <strong>@ProgressPercent.ToString("0")%</strong></li>
+            </ul>
+            @if (!string.IsNullOrEmpty(postError))
+            {
+                <div class="status-inline error">@postError</div>
+            }
+            <div class="dialog-actions">
+                <DxButton Text="Cancelar" ButtonType="ButtonType.Normal" Enabled="!isPosting" Click="() => showFinalizeConfirm = false" />
+                <DxButton Text="Enviar"
+                          CssClass="finalize"
+                          Enabled="@(CanFinalize() && !isPosting)"
+                          Click="FinalizarAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<!-- Popup Éxito -->
+<DxPopup @bind-Visible="showSuccess"
+         Width="300px"
+         CloseOnOutsideClick="false"
+         ShowFooter="false">
+    <HeaderTemplate>Procesado</HeaderTemplate>
+    <BodyTemplate>
+        <div class="confirm-body">
+            <p>Datos enviados correctamente.</p>
+            <div class="dialog-actions">
+                <DxButton Text="Aceptar" Click='() => Nav.NavigateTo("/Bodega/EgresoComprobante", true)' />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public string guid { get; set; } = string.Empty;
+
+    private DxTextBox? txtCodigoCapturaRef;
+    private DxTextBox? txtSerieCapturaRef;
+
+    private bool _pendingInitialFocus;
+    private OrigenMovimiento? item;
+    private Dictionary<string, List<ComprobanteMovimiento>> groupedComprobantes = new();
+    private List<string> groupKeys = new();
+    private string selectedCompte = "";
+    private string selectedNumCompte = "";
+    private string selectedBodega = "";
+    private DetalleMovimiento? selectedDetalle;
+
+    private bool isLoading = true;
+    private string? loadError;
+    private CancellationTokenSource? _cts;
+
+    private string _codigoItemIngresado = "";
+    private bool _inReset;
+
+    // [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Debe ingresar Codigo")]
+    // [System.ComponentModel.DataAnnotations.StringLength(16, ErrorMessage = "The Identifier exceeds 16 characters.")]
+    private string codigoItemIngresado
+    {
+        get => _codigoItemIngresado;
+        set
+        {
+            var newVal = value ?? string.Empty;
+            var wasEmpty = string.IsNullOrEmpty(_codigoItemIngresado);
+            _codigoItemIngresado = newVal;
+
+            // Si pasó de tener valor a quedar vacío (p.ej. ClearButton), resetea captura
+            if (!_inReset && !wasEmpty && string.IsNullOrEmpty(newVal))
+            {
+                try
+                {
+                    _inReset = true;
+                    ResetCapturaActual();
+                }
+                finally
+                {
+                    _inReset = false;
+                }
+            }
+        }
+    }
+    private string articuloDescripcion = "";
+    private string serieIngresada = "";
+    private string productoNoEncontradoMessage = "";
+
+    // NUEVO: Estado visual del código válido
+    private bool codigoValido = false;
+
+    // Finalización
+    private bool showFinalizeConfirm = false;
+    private bool showSuccess = false;
+    private bool isPosting = false;
+    private string? postError;
+
+    // Métricas (productos)
+    private int TotalProductosIngresados =>
+        groupedComprobantes.Values
+            .SelectMany(c => c)
+            .SelectMany(c => c.Detalles)
+            .Sum(d => d.CantidadIngresada);
+
+    private int TotalProductos =>
+        groupedComprobantes.Values
+            .SelectMany(c => c)
+            .SelectMany(c => c.Detalles)
+            .Sum(d => d.Cantidad);
+
+    private double ProgressPercent => TotalProductos == 0 ? 0 : (double)TotalProductosIngresados / TotalProductos * 100d;
+
+    // escaneo
+    private System.Timers.Timer? escaneoTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (!AuthService.IsAuthenticated)
+            {
+                loadError = "Sesión expirada.";
+                return;
+            }
+
+            isLoading = true;
+            loadError = null;
+
+            var tipoEgreso = await SessionStorage.GetItemAsync<string>($"{guid}-TipoEgreso");
+            var IdentificadorOrigen = await SessionStorage.GetItemAsync<string>($"{guid}-SelectedSecuencia");
+
+            if (string.IsNullOrWhiteSpace(tipoEgreso) || string.IsNullOrWhiteSpace(IdentificadorOrigen))
+            {
+                loadError = "No se encontraron parámetros en la sesión.";
+                return;
+            }
+
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+            var ct = _cts.Token;
+
+            using var client = HttpClientFactory.CreateClient("Api");
+            var urlrequest = $"store/OrigenMovimientoMercaderiaDetalle/{tipoEgreso}/{IdentificadorOrigen}/{guid}";
+            var request = new HttpRequestMessage(HttpMethod.Get, urlrequest);
+            var response = await client.SendAsync(request, ct);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var apiResult = await response.Content.ReadFromJsonAsync<Result<OrigenMovimiento>>(cancellationToken: ct);
+
+                if (apiResult?.data == null)
+                {
+                    loadError = "No se encontraron datos para la secuencia indicada.";
+                    return;
+                }
+
+                item = apiResult.data;
+
+                if (item.Comprobantes != null)
+                {
+                    groupedComprobantes = item.Comprobantes
+                        .GroupBy(c => c.SeqCompte ?? "Sin Compte")
+                        .ToDictionary(g => g.Key, g => g.ToList());
+
+                    groupKeys = groupedComprobantes.Keys.OrderBy(k => k).ToList();
+
+                    if (groupKeys.Count > 0)
+                    {
+                        await SeleccionarCompte(groupKeys[0]);
+                        _pendingInitialFocus = true;
+                    }
+                }
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync(ct);
+                var errorObj = System.Text.Json.JsonSerializer.Deserialize<Result<object>>(errorContent);
+
+                loadError = $"Error cargando datos: {errorObj?.message ?? response.ReasonPhrase}";
+            }
+
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Error cargando datos: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("EgresoDetalleHeader.init", ".top-header", "#stickySentinel");
+            }
+            catch { /* no-op */ }
+        }
+
+        if (_pendingInitialFocus && !isLoading)
+        {
+            await FocusCodigoCapturaAsync();
+            _pendingInitialFocus = false;
+        }
+    }
+
+    string GetTipoName() => item?.TipoOrigen switch
+    {
+        "C" => "ID Cubicaje",
+        "H" => "ID HojaRuta",
+        "E" => "Compt. Egreso/Factur",
+        _ => "Secuencia"
+    };
+
+    async Task SeleccionarCompte(string compte)
+    {
+        selectedCompte = compte;
+        var primerComprobante = groupedComprobantes.TryGetValue(compte, out var lista)
+            ? lista.FirstOrDefault()
+            : null;
+
+        if (primerComprobante != null)
+        {
+            selectedNumCompte = primerComprobante.NumCompte;
+            selectedBodega = primerComprobante.Bodega;
+        }
+        else
+        {
+            selectedNumCompte = "";
+            selectedBodega = "";
+            selectedDetalle = null;
+        }
+        ResetCapturaActual();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private (int captured, int expected) GetCompProgress(string key)
+    {
+        var comp = groupedComprobantes[key].First();
+        var expected = comp.Detalles.Sum(d => d.Cantidad);
+        var captured = comp.Detalles.Sum(d => d.CantidadIngresada);
+        return (captured, expected);
+    }
+
+    private async Task HandleCodigoItemCaptura(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Code == "Enter" || e.Code == "NumpadEnter")
+        {
+            await Task.Delay(50);
+            _codigoItemIngresado = codigoItemIngresado?.Trim() ?? string.Empty;
+            await ValidarCodigoItem();
+        }
+    }
+
+    private async Task HandleSerieCaptura(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" || e.Code == "Enter" || e.Code == "NumpadEnter")
+        {
+            await Task.Delay(50);
+            serieIngresada = serieIngresada?.Trim() ?? string.Empty;
+            await IngresarSerie();
+        }
+    }
+
+
+    private async Task HandleCodigoItemInput(ChangeEventArgs e)
+    {
+        codigoItemIngresado = e.Value?.ToString() ?? string.Empty;
+
+        // Reinicia el temporizador cada vez que se detecta una entrada
+        escaneoTimer?.Stop();
+        escaneoTimer?.Dispose();
+
+        escaneoTimer = new System.Timers.Timer(200); // 200ms de espera sin teclear
+        escaneoTimer.Elapsed += async (_, _) =>
+        {
+            escaneoTimer?.Stop();
+            escaneoTimer?.Dispose();
+            escaneoTimer = null;
+
+            await InvokeAsync(async () =>
+            {
+                Console.WriteLine("Código leído: " + codigoItemIngresado);
+                await ValidarCodigoItem();
+            });
+        };
+
+        escaneoTimer.Start();
+    }
+
+
+    private async Task ValidarCodigoItem()
+    {
+
+        Console.WriteLine($"ValidarCodigoItem : {codigoItemIngresado}");
+
+        productoNoEncontradoMessage = "";
+
+        if (string.IsNullOrWhiteSpace(codigoItemIngresado) || string.IsNullOrWhiteSpace(selectedCompte))
+            return;
+
+        if (selectedDetalle?.CodigoItem == codigoItemIngresado)
+            return;
+
+        var primer = groupedComprobantes[selectedCompte].FirstOrDefault();
+        var detalle = primer?.Detalles.FirstOrDefault(d =>
+            string.Equals(d.CodigoItem, codigoItemIngresado, StringComparison.OrdinalIgnoreCase));
+
+        if (detalle != null)
+        {
+            selectedDetalle = detalle;
+            articuloDescripcion = detalle.Descripcion;
+            codigoValido = true; // Marca código correcto (resalta en verde)
+            serieIngresada = "";
+            await FocusSerieCapturaAsync();
+        }
+        else
+        {
+            productoNoEncontradoMessage = "Producto no encontrado.";
+            selectedDetalle = null;
+            articuloDescripcion = string.Empty;
+            codigoValido = false; // Quita estado de válido
+            await FocusCodigoCapturaAsync();
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+
+    private async Task<(bool, string)> controlSerie(SerieMovimiento serieMovimiento, string? accion)
+    {
+        try
+        {
+            _cts?.Cancel();
+            _cts = new CancellationTokenSource();
+            var ct = _cts.Token;
+
+            using var client = HttpClientFactory.CreateClient("Api");
+
+            var urlrequest = $"store/RegistrarSerieMovimiento/{guid}{(!string.IsNullOrEmpty(accion) ? $"?accion={accion}" : "")}";
+            var request = new HttpRequestMessage(HttpMethod.Post, urlrequest)
+            {
+                Content = JsonContent.Create(serieMovimiento)
+            };
+            var response = await client.SendAsync(request, ct);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<Result<object>>(cancellationToken: ct);
+                return (result?.succeeded ?? false, result?.message ?? "Error Serie: Error de conectividad");
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync(ct);
+                var errorObj = System.Text.Json.JsonSerializer.Deserialize<Result<object>>(errorContent);
+                return (true, $"Error Serie: {errorObj?.message ?? response.ReasonPhrase}");
+            }
+
+
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    private async Task IngresarSerie()
+    {
+        if (selectedDetalle == null)
+        {
+            productoNoEncontradoMessage = "Debe seleccionar un producto válido.";
+            await FocusCodigoCapturaAsync();
+            return;
+        }
+
+
+
+        if (string.IsNullOrWhiteSpace(serieIngresada))
+        {
+            await FocusSerieCapturaAsync();
+            return;
+        }
+
+
+        if (selectedDetalle.CantidadIngresada >= selectedDetalle.Cantidad * (selectedDetalle.SeriesPorUnidad <= 0 ? 1 : selectedDetalle.SeriesPorUnidad))
+        {
+            await FocusSerieCapturaAsync();
+            productoNoEncontradoMessage = "Cantidad de series ya completa para este artículo.";
+            return;
+        }
+
+        selectedDetalle.SeriesCapturadas ??= new List<string>();
+
+        if (selectedDetalle.SeriesCapturadas.Contains(serieIngresada, StringComparer.OrdinalIgnoreCase))
+        {
+            productoNoEncontradoMessage = "Serie ya ingresada.";
+            return;
+        }
+
+        var (b, msg) = await controlSerie(new SerieMovimiento
+        {
+            SeqCompte = selectedCompte,
+            CodigoItem = selectedDetalle.CodigoItem,
+            Serie = serieIngresada.Trim()
+        }, "INS");
+
+        if (!b)
+        {
+            await FocusSerieCapturaAsync();
+            productoNoEncontradoMessage = msg;
+            return;
+        }
+
+        selectedDetalle.SeriesCapturadas.Add(serieIngresada.Trim());
+        ResetCapturaActual();
+        StateHasChanged();
+    }
+
+    private async Task<bool> RemoveSerie(string serie)
+    {
+        if (selectedDetalle?.SeriesCapturadas == null) return false;
+
+        var (b, msg) = await controlSerie(new SerieMovimiento
+        {
+            SeqCompte = selectedCompte,
+            CodigoItem = selectedDetalle.CodigoItem,
+            Serie = serie
+        }, "DEL");
+
+        if (!b)
+        {
+            await FocusSerieCapturaAsync();
+            productoNoEncontradoMessage = msg;
+            return false;
+        }
+        selectedDetalle.SeriesCapturadas.Remove(serie);
+        StateHasChanged();
+        return true;
+    }
+
+    private void ResetCapturaActual()
+    {
+        serieIngresada = "";
+        codigoItemIngresado = "";
+        articuloDescripcion = "";
+        selectedDetalle = null;
+        productoNoEncontradoMessage = "";
+        codigoValido = false; // Limpia el estado visual
+        FocusCodigoCapturaAsync();
+    }
+
+    private int ExpectedSeriesFor(DetalleMovimiento? d)
+    {
+        if (d == null) return 0;
+        var spUnit = d.SeriesPorUnidad <= 0 ? 1 : d.SeriesPorUnidad;
+        return d.Cantidad * spUnit;
+    }
+
+    private bool CanFinalize()
+        => item != null && TotalProductosIngresados > 0;
+
+    private async Task FinalizarAsync()
+    {
+        if (item == null) return;
+        postError = null;
+        isPosting = true;
+
+        try
+        {
+            var client = HttpClientFactory.CreateClient("Api");
+            var response = await client.PostAsJsonAsync("store/processOrigenMovimientoMercaderia", item);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                postError = $"Error HTTP {(int)response.StatusCode}: {response.ReasonPhrase}";
+                return;
+            }
+
+            showFinalizeConfirm = false;
+            showSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            postError = $"Error enviando datos: {ex.Message}";
+        }
+        finally
+        {
+            isPosting = false;
+        }
+    }
+
+    // Evento RowClick (cuando se requiera reactivar)
+    private void OnDetalleRowClick(GridRowClickEventArgs args)
+    {
+        // if (args?.DataItem is DetalleMovimiento dm)
+        // {
+        //     selectedDetalle = dm;
+        //     codigoItemIngresado = dm.CodigoItem;
+        //     articuloDescripcion = dm.Descripcion;
+        //     serieIngresada = "";
+        //     productoNoEncontradoMessage = "";
+        //     StateHasChanged();
+        // }
+    }
+
+
+    private async Task FocusCodigoCapturaAsync()
+    {
+        try
+        {
+            if (txtCodigoCapturaRef is not null)
+                await txtCodigoCapturaRef.FocusAsync();
+            else
+                await JS.InvokeVoidAsync("focusElementById", "txtCodigoCaptura");
+        }
+        catch { /* no-op */ }
+    }
+
+    private async Task FocusSerieCapturaAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("focusAndCenterById", "txtSerieCaptura");
+        }
+        catch
+        {
+            try
+            {
+                if (txtSerieCapturaRef is not null)
+                    await txtSerieCapturaRef.FocusAsync();
+                else
+                    await JS.InvokeVoidAsync("focusElementById", "txtSerieCaptura");
+            }
+            catch { /* no-op */ }
+        }
+    }
+}
+
+
+
+<script>
+    window.EgresoDetalleHeader = window.EgresoDetalleHeader || {
+      init: function (headerSelector, sentinelSelector) {
+        try {
+          const header = document.querySelector(headerSelector);
+          const sentinel = document.querySelector(sentinelSelector);
+          if (!header || !sentinel) return;
+
+          const setHeaderHeight = () => {
+            const h = Math.round(header.getBoundingClientRect().height);
+            document.documentElement.style.setProperty('--hdr-h', (h || 75) + 'px');
+          };
+
+          const io = new IntersectionObserver((entries) => {
+            entries.forEach(e => {
+              if (e.isIntersecting) header.classList.remove('compact');
+              else header.classList.add('compact');
+              setHeaderHeight();
+            });
+          }, { rootMargin: "0px 0px 0px 0px", threshold: [0, 1] });
+
+          io.observe(sentinel);
+
+          // Recalcular en resize/orientation change
+          window.addEventListener('resize', setHeaderHeight, { passive: true });
+          window.addEventListener('orientationchange', setHeaderHeight, { passive: true });
+
+          // Observa cambios de clase (compact) para actualizar altura
+          const mo = new MutationObserver(setHeaderHeight);
+          mo.observe(header, { attributes: true, attributeFilter: ['class'] });
+
+          // Inicial
+          setHeaderHeight();
+        } catch { /* noop */ }
+      }
+    };
+
+    window.focusElementById = function (id) {
+        var el = document.getElementById(id);
+        if (el) {
+            el.querySelector('input')?.focus();
+        }
+    };
+
+        window.focusAndCenterById = function (id) {
+        try {
+            const host = document.getElementById(id);
+            if (!host) return;
+
+            const el = host.querySelector('input, textarea, select, [contenteditable="true"], button, a[href], [tabindex]:not([tabindex="-1"])') || host;
+
+            // Si es la primera vez que se llama, esperar un poco antes de aplicar el scroll
+            setTimeout(() => {
+                // Desplazar el elemento al centro de la vista
+                el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+
+                // Enfocar el elemento, evitando el movimiento del scroll
+                setTimeout(() => {
+                    if (typeof el.focus === 'function') {
+                        try {
+                            el.focus({ preventScroll: true });
+                        } catch {
+                            el.focus();
+                        }
+                    }
+                }, 50); // Le damos tiempo al scroll para que ocurra primero
+            }, 100); // Este es el pequeño retraso para permitir que el navegador complete el layout
+        } catch { /* no-op */ }
+    };
+
+</script>
+
+<style>
+
+
+    /* Layout base */
+    .detalle-root {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding-bottom: 1rem;
+    }
+
+    /* Sentinel (no visible) */
+    .sticky-sentinel {
+        position: relative;
+        width: 100%;
+        height: 1px; /* disparador del observer */
+    }
+
+    /* Estado */
+    .status-block {
+        padding: .75rem 1rem;
+        border-radius: 6px;
+        font-size: .9rem;
+    }
+
+        .status-block.info {
+            background: #e8f4ff;
+            color: #024c7b;
+        }
+
+        .status-block.error {
+            background: #ffe8e8;
+            color: #7b0202;
+        }
+
+        .status-block.warn {
+            background: #fff7e0;
+            color: #6b4d00;
+        }
+
+    .status-inline {
+        margin-top: .5rem;
+        font-size: .8rem;
+    }
+
+        .status-inline.error {
+            color: #b30000;
+        }
+
+        .status-inline.warn {
+            color: #8a6d00;
+        }
+
+    /* Encabezado */
+    .top-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--dxbl-background, #fff);
+        display: flex;
+        flex-direction: column;
+        gap: .75rem;
+        padding: .5rem .75rem 1rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,.08);
+        border-radius: 8px;
+    }
+
+        .top-header.compact {
+            padding: .35rem .5rem .5rem;
+            gap: .45rem;
+        }
+
+            .top-header.compact .progress-box {
+                flex-direction: row;
+                align-items: center;
+                gap: .5rem;
+            }
+
+            .top-header.compact .progress-info {
+                font-size: .78rem;
+                white-space: nowrap;
+            }
+
+            .top-header.compact .progress-bar-outer {
+                flex: 1 1 auto;
+                height: 8px;
+            }
+
+
+
+    .progress-box {
+        display: flex;
+        flex-direction: column;
+        gap: .35rem;
+    }
+
+    .progress-info {
+        display: flex;
+        align-items: baseline;
+        gap: .5rem;
+        font-size: .85rem;
+    }
+
+        .progress-info .muted {
+            color: #666;
+            font-weight: 400;
+        }
+
+    .progress-bar-outer {
+        width: 100%;
+        height: 10px;
+        background: #e0e6ed;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .progress-bar-inner {
+        height: 100%;
+        background: linear-gradient(90deg,#007bff,#3fa9ff);
+        transition: width .35s ease;
+    }
+
+    .actions-inline {
+        display: flex;
+        gap: .5rem;
+        flex-wrap: wrap;
+    }
+
+    /* Comprobantes horizontales */
+    .comprobantes-wrapper {
+        position: sticky;
+        top: var(--hdr-h, 75px);
+        z-index: 9;
+        overflow: hidden;
+        background: var(--dxbl-background, #fff);
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .comprobantes-strip {
+        display: flex;
+        gap: .6rem;
+        overflow-x: auto;
+        padding: .5rem;
+        -webkit-overflow-scrolling: touch;
+        scroll-snap-type: x proximity;
+    }
+
+    .comp-card {
+        scroll-snap-align: start;
+        min-width: 200px;
+        max-width: 240px;
+        border: 1px solid #e6e9ef;
+        border-radius: 10px;
+        padding: .55rem .6rem .6rem;
+        background: #f8fafc;
+        display: flex;
+        flex-direction: column;
+        gap: .35rem;
+        cursor: pointer;
+        position: relative;
+        transition: border-color .2s ease, background-color .2s ease, transform .1s ease;
+    }
+
+        .comp-card:hover {
+            transform: translateY(-1px);
+        }
+
+        .comp-card.selected {
+            border-color: #0d6efd;
+            background: #eef6ff;
+            box-shadow: 0 2px 6px rgba(13,110,253,.15);
+        }
+
+    .comp-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .4rem;
+    }
+
+    .comp-num {
+        font-weight: 700;
+        color: #243b53;
+    }
+
+    .comp-bod {
+        font-size: .8rem;
+        color: #4f6b95;
+    }
+
+    .comp-date {
+        font-size: .75rem;
+        color: #697a8c;
+    }
+
+    .comp-progress {
+        display: flex;
+        gap: .4rem;
+        align-items: center;
+    }
+
+        .comp-progress .rail {
+            flex: 1;
+            height: 6px;
+            background: #e0e6ed;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .comp-progress .fill {
+            height: 100%;
+            background: linear-gradient(90deg, #20c997, #0d6efd);
+        }
+
+        .comp-progress .meta {
+            font-size: .75rem;
+            color: #334e68;
+            min-width: 52px;
+            text-align: right;
+        }
+
+    .chip-current {
+        position: absolute;
+        top: .45rem;
+        right: .45rem;
+        background: #198754;
+        color: #fff;
+        font-size: .65rem;
+        padding: .15rem .4rem;
+        border-radius: 10px;
+    }
+
+    /* Banner seleccionado */
+    .selected-comp-banner {
+        background: #f1f5fb;
+        border-left: 4px solid #0d6efd;
+        padding: .45rem .6rem;
+        border-radius: 6px;
+        font-size: .9rem;
+        display: flex;
+        gap: .5rem;
+        align-items: center;
+    }
+
+        .selected-comp-banner .label {
+            color: #49658c;
+            font-weight: 600;
+        }
+
+        .selected-comp-banner .value {
+            color: #182b4d;
+        }
+
+    /* Panel de captura */
+    .capture-panel {
+        background: var(--dxbl-background, #fff);
+        border-radius: 12px;
+        padding: .9rem .9rem 1.1rem;
+        box-shadow: 0 2px 6px rgba(0,0,0,.07);
+        display: flex;
+        flex-direction: column;
+        gap: .85rem;
+    }
+
+    .section-title {
+        font-weight: 600;
+        font-size: .95rem;
+        letter-spacing: .5px;
+        text-transform: uppercase;
+        color: #2b4b70;
+    }
+
+    .responsive-grid {
+        display: grid;
+        gap: .65rem;
+        grid-template-columns: repeat(auto-fill,minmax(140px,1fr));
+    }
+
+    .capture-actions {
+        display: flex;
+        gap: .6rem;
+        flex-wrap: wrap;
+    }
+
+    /* Series */
+    .series-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+    }
+
+    .series-header {
+        font-size: .8rem;
+        font-weight: 600;
+        color: #334;
+        display: flex;
+        gap: .5rem;
+        align-items: baseline;
+    }
+
+        .series-header .muted {
+            color: #666;
+            font-weight: 400;
+        }
+
+    .series-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+    }
+
+    .chip {
+        background: #eef3f9;
+        color: #234;
+        padding: .3rem .55rem;
+        border-radius: 16px;
+        font-size: .7rem;
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        line-height: 1;
+    }
+
+    .chip-remove {
+        all: unset;
+        cursor: pointer;
+        color: #555;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0 .2rem;
+    }
+
+        .chip-remove:hover {
+            color: #b30000;
+        }
+
+    .finalize {
+        background: #198754;
+        color: #fff;
+    }
+
+    .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: .6rem;
+        margin-top: 1rem;
+    }
+
+    .confirm-body {
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+        font-size: .85rem;
+    }
+
+    .mini-list {
+        margin: 0;
+        padding-left: 1.1rem;
+        font-size: .75rem;
+    }
+
+        .mini-list li {
+            margin: .15rem 0;
+        }
+
+    .footer-space {
+        height: 40px;
+    }
+
+    .page-title {
+        margin-bottom: .5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    /* Grid ajustes */
+    .detalles-grid .dxbl-grid-table {
+        font-size: .72rem;
+    }
+
+    /* NUEVO: Campo compacto para Artículo (chip) */
+    .field-compact {
+        display: flex;
+        flex-direction: column;
+        gap: .25rem;
+        min-width: 0; /* permite elipsis */
+    }
+
+    .field-label {
+        font-size: .75rem;
+        color: #5f6b7a;
+        font-weight: 600;
+    }
+
+    .article-chip {
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* NUEVO: Estado válido para el editor de Código */
+    #txtCodigoCaptura.valid,
+    #txtCodigoCaptura.valid .dxbl-input,
+    #txtCodigoCaptura.valid input {
+        border-color: #198754;
+    }
+
+    #txtCodigoCaptura.valid {
+        box-shadow: 0 0 0 2px rgba(25,135,84,.20);
+        border-radius: 6px;
+    }
+
+        #txtCodigoCaptura.valid input,
+        #txtCodigoCaptura.valid .dxbl-input,
+        #txtCodigoCaptura.valid .dxbl-text-box-input {
+            border-color: #198754 !important;
+        }
+
+    /* Responsivo general */
+    @@media (max-width: 640px) {
+        .top-header {
+            padding: .5rem .6rem .7rem;
+        }
+
+        .actions-inline {
+            flex-direction: row;
+        }
+
+        .capture-panel {
+            padding: .75rem .75rem 1rem;
+        }
+
+        .responsive-grid {
+            grid-template-columns: repeat(auto-fill,minmax(120px,1fr));
+        }
+
+        .page-title {
+            font-size: 1rem;
+        }
+
+        .comp-card {
+            min-width: 170px;
+        }
+    }
+
+    /* Handheld (480x692 aprox): evitar que el chip tape 'Bod', y optimizar layout */
+    @@media (max-width: 520px) {
+        .comp-bod {
+            flex: 1 1 100%;
+            order: 2;
+        }
+        /* El chip pasa a flujo normal y ocupa 1 caracter de ancho */
+        .chip-current {
+            align-self: flex-start;
+            order: 3;
+            font-size: 0; /* oculta el texto real sin ocupar ancho */
+            padding: 0; /* para que el ancho total sea exactamente 1ch */
+            line-height: 1; /* altura compacta */
+        }
+
+            .chip-current::before {
+                content: " ";
+                display: inline-block;
+                width: 2ch; /* exactamente 1 caracter */
+                height: 1em; /* mantiene la altura del chip */
+                font-size: .95rem; /* altura visual coherente con el diseño */
+            }
+        /* Ajuste de rail/meta para que siempre se vea */
+        .comp-progress {
+            gap: .35rem;
+        }
+
+            .comp-progress .meta {
+                min-width: 44px;
+                font-size: .7rem;
+            }
+
+            .comp-progress .rail {
+                height: 6px;
+                min-width: 60px;
+            }
+    }
+
+    /* Handheld (480x692 aprox): fuerza modo compacto del header y ajuste de listas */
+    @@media (max-width: 520px) and (max-height: 740px) {
+        .top-header {
+            padding: .35rem .5rem .5rem;
+            gap: .45rem;
+        }
+            /*.top-header .id-box {
+                        display: none;
+                    }*/
+
+            .top-header .progress-box {
+                flex-direction: row;
+                align-items: center;
+                gap: .5rem;
+            }
+
+            .top-header .progress-info {
+                font-size: .78rem;
+                white-space: nowrap;
+            }
+
+            .top-header .progress-bar-outer {
+                flex: 1 1 auto;
+                height: 8px;
+            }
+
+        .comprobantes-strip {
+            padding: .4rem;
+            gap: .5rem;
+        }
+
+        .capture-panel {
+            gap: .7rem;
+        }
+
+        .series-chips {
+            max-height: 120px;
+            overflow: auto;
+        }
+    }
+
+    /* Acordeón para el grid de detalles */
+    .accordion-panel {
+        background: var(--dxbl-background, #fff);
+        border-radius: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.06);
+        overflow: hidden;
+    }
+
+    .accordion-summary {
+        cursor: pointer;
+        padding: .65rem .8rem;
+        font-weight: 600;
+        color: #2b4b70;
+        list-style: none;
+        outline: none;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        user-select: none;
+    }
+
+        .accordion-summary::-webkit-details-marker {
+            display: none;
+        }
+
+    .accordion-panel[open] .accordion-summary {
+        border-bottom: 1px solid #e6e9ef;
+    }
+
+    .accordion-content {
+        padding: .6rem .6rem .8rem;
+        background: var(--dxbl-background, #fff);
+    }
+</style>
