@@ -3,10 +3,10 @@
 @using com.laganga.app.Shared.Models
 @using com.laganga.app.Shared.Services
 @using DevExpress.Blazor
-@inject IHttpClientFactory HttpClientFactory
-@inject IAuthenticationService AuthService
-@inject Blazored.SessionStorage.ISessionStorageService SessionStorage
 @inject NavigationManager Nav
+@inject IAuthenticationService AuthService
+@inject IApiGangaClient apiClient
+@inject Blazored.SessionStorage.ISessionStorageService SessionStorage
 @inject IJSRuntime JS
 
 
@@ -20,7 +20,14 @@ else if (!string.IsNullOrEmpty(loadError))
 {
     <h3 class="page-title">Egreso Comprobante - Detalle</h3>
 
-    <div class="status-block error">@loadError</div>
+    <div class="status-block error">
+        @loadError
+
+        <DxButton Text="Reintentar"
+                  ButtonType="ButtonType.Normal"
+                  CssClass="retry-btn"
+                  Click="LoadDataAsync" />
+    </div>
 }
 else if (item == null)
 {
@@ -30,18 +37,28 @@ else if (item == null)
 }
 else
 {
-    <h3 class="page-title">@($"Despacho {GetTipoName()}: {item!.IdentificadorOrigenVisible}")</h3>
+    <div class="title-bar">
+        <h3 class="page-title">@($"Despacho {GetTipoName()}: {item!.IdentificadorOrigenVisible}")</h3>
+
+        <button type="button"
+                class="@($"refresh-btn{(isLoading ? " spinning" : "")}")"
+                @onclick="LoadDataAsync"
+                disabled="@isLoading"
+                aria-label="Actualizar"
+                title="Actualizar">
+            <svg class="refresh-icn" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+            </svg>
+        </button>
+    </div>
 
     <div class="detalle-root">
 
-        <!-- Sentinel para detectar colapso (para sticky) -->
         <div id="stickySentinel" class="sticky-sentinel" aria-hidden="true"></div>
 
-        <!-- Encabezado fijo (se colapsa con clase .compact) -->
         <div class="top-header">
-            @* <div class="id-box">
-                <label>@($"{GetTipoName()}: {item!.IdentificadorOrigenVisible}")</label>
-            </div> *@
             <div class="progress-box">
                 <div class="progress-info">
                     <span>Productos: <strong>@TotalProductosIngresados</strong>/<strong>@TotalProductos</strong></span>
@@ -56,13 +73,12 @@ else
                           ButtonType="ButtonType.Normal"
                           Click='() => Nav.NavigateTo("/Bodega/EgresoComprobante", true)' />
                 <DxButton Text="Finalizar"
-                          CssClass="finalize"
+                          CssClass="@( CanFinalize() ? "finalize" : "" )"
                           Enabled="@CanFinalize()"
                           Click="() => showFinalizeConfirm = true" />
             </div>
         </div>
 
-        <!-- Comprobantes: tarjetas horizontales (sticky bajo el header) -->
         <div class="comprobantes-wrapper">
             <div class="comprobantes-strip" role="tablist" aria-label="Comprobantes">
                 @foreach (var key in groupKeys)
@@ -70,6 +86,7 @@ else
                     var comp = groupedComprobantes[key].First();
                     var (cap, exp) = GetCompProgress(key);
                     <button type="button"
+                            data-comp-key="@key"
                             class="comp-card @(selectedCompte == key ? "selected" : "")"
                             role="tab"
                             aria-selected="@(selectedCompte == key ? "true" : "false")"
@@ -78,9 +95,9 @@ else
                             <div class="comp-num">#@comp.NumCompte</div>
                             <div class="comp-bod">@($"Bod: {comp.Bodega}")</div>
                         </div>
-                        @* <div class="comp-row">
-                            <div class="comp-date">@comp.Fecha:dd/MM/yyyy</div>
-                        </div> *@
+                        <div class="comp-row">
+                            <div class="comp-dest">@($"{comp.Destinatario}")</div>
+                        </div>
                         <div class="comp-progress">
                             <div class="rail">
                                 <div class="fill" style="width:@(exp == 0 ? "0%" : $"{Math.Min(100, (int)((double)cap / exp * 100))}%")"></div>
@@ -96,16 +113,6 @@ else
             </div>
         </div>
 
-        <!-- Banner de comprobante seleccionado -->
-        @if (!string.IsNullOrWhiteSpace(selectedCompte) && 1 == 0)
-        {
-            <div class="selected-comp-banner">
-                <span class="label">Comprobante seleccionado:</span>
-                <span class="value">NumCompte: @selectedNumCompte • Bodega: @selectedBodega</span>
-            </div>
-        }
-
-        <!-- Grid de detalles del comprobante seleccionado -->
         @{
             var compSel = (!string.IsNullOrWhiteSpace(selectedCompte) && groupedComprobantes.TryGetValue(selectedCompte, out var listSel))
             ? listSel.FirstOrDefault()
@@ -140,7 +147,6 @@ else
             </details>
         }
 
-        <!-- Panel de Captura -->
         <div class="capture-panel">
             <div class="section-title">Captura</div>
             <div class="responsive-grid">
@@ -159,9 +165,7 @@ else
                            NullText="Escanear / escribir código">
                 </DxTextBox>
 
-                <!-- Artículo: reemplazado por chip compacta -->
                 <div class="field-compact" style='@(!codigoValido ? "display: none;" : "")'>
-                    @* <div class="field-label">Artículo</div> *@
                     <div class="chip article-chip" title="@articuloDescripcion">
                         @(string.IsNullOrWhiteSpace(articuloDescripcion) ? "—" : articuloDescripcion)
                     </div>
@@ -214,64 +218,56 @@ else
                 </div>
             }
         </div>
-
-        @* <div class="footer-space"></div> *@
     </div>
 }
 
-<!-- Popup Finalizar -->
-<DxPopup @bind-Visible="showFinalizeConfirm"
-         Width="340px"
-         CloseOnOutsideClick="true"
-         ShowCloseButton="true"
-         ShowFooter="false">
-    <HeaderTemplate>Confirmar envío</HeaderTemplate>
-    <BodyTemplate>
-        <div class="confirm-body">
-            <p>Se enviará la información capturada. ¿Desea continuar?</p>
-            <ul class="mini-list">
-                <li>Total productos ingresados: <strong>@TotalProductosIngresados</strong></li>
-                <li>Total productos: <strong>@TotalProductos</strong></li>
-                <li>Progreso: <strong>@ProgressPercent.ToString("0")%</strong></li>
-            </ul>
-            @if (!string.IsNullOrEmpty(postError))
-            {
-                <div class="status-inline error">@postError</div>
-            }
-            <div class="dialog-actions">
-                <DxButton Text="Cancelar" ButtonType="ButtonType.Normal" Enabled="!isPosting" Click="() => showFinalizeConfirm = false" />
-                <DxButton Text="Enviar"
-                          CssClass="finalize"
-                          Enabled="@(CanFinalize() && !isPosting)"
-                          Click="FinalizarAsync" />
+@if (showFinalizeConfirm)
+{
+    <div class="modal-backdrop" @onclick="() => showFinalizeConfirm = false">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="finalizeTitle" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h4 id="finalizeTitle" class="modal-title">Confirmar envío</h4>
+                <button type="button"
+                        class="modal-close"
+                        title="Cerrar"
+                        aria-label="Cerrar"
+                        @onclick="() => showFinalizeConfirm = false">
+                    ×
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Se enviará la información capturada. ¿Desea continuar?</p>
+                <ul class="mini-list">
+                    <li>Total productos ingresados: <strong>@TotalProductosIngresados</strong></li>
+                    <li>Total productos: <strong>@TotalProductos</strong></li>
+                    <li>Progreso: <strong>@ProgressPercent.ToString("0")%</strong></li>
+                </ul>
+                @if (!string.IsNullOrEmpty(postError))
+                {
+                    <div class="modal-error">@postError</div>
+                }
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" type="button" disabled="@isPosting" @onclick="() => showFinalizeConfirm = false">Cancelar</button>
+                <button class="btn btn-primary" type="button" disabled="@( !CanFinalize() || isPosting )" @onclick="FinalizarAsync">Enviar</button>
             </div>
         </div>
-    </BodyTemplate>
-</DxPopup>
+    </div>
+}
 
-<!-- Popup Éxito -->
-<DxPopup @bind-Visible="showSuccess"
-         Width="300px"
-         CloseOnOutsideClick="false"
-         ShowFooter="false">
-    <HeaderTemplate>Procesado</HeaderTemplate>
-    <BodyTemplate>
-        <div class="confirm-body">
-            <p>Datos enviados correctamente.</p>
-            <div class="dialog-actions">
-                <DxButton Text="Aceptar" Click='() => Nav.NavigateTo("/Bodega/EgresoComprobante", true)' />
-            </div>
-        </div>
-    </BodyTemplate>
-</DxPopup>
 
 @code {
     [Parameter] public string guid { get; set; } = string.Empty;
+
+    private string tipoEgreso { get; set; } = string.Empty;
+    private string IdentificadorOrigen { get; set; } = string.Empty;
 
     private DxTextBox? txtCodigoCapturaRef;
     private DxTextBox? txtSerieCapturaRef;
 
     private bool _pendingInitialFocus;
+    private string? _pendingScrollCompteKey;
+
     private OrigenMovimiento? item;
     private Dictionary<string, List<ComprobanteMovimiento>> groupedComprobantes = new();
     private List<string> groupKeys = new();
@@ -283,12 +279,12 @@ else
     private bool isLoading = true;
     private string? loadError;
     private CancellationTokenSource? _cts;
+    IDisposable? _navReg;
+    bool datosCambiados = false;
 
     private string _codigoItemIngresado = "";
     private bool _inReset;
 
-    // [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Debe ingresar Codigo")]
-    // [System.ComponentModel.DataAnnotations.StringLength(16, ErrorMessage = "The Identifier exceeds 16 characters.")]
     private string codigoItemIngresado
     {
         get => _codigoItemIngresado;
@@ -297,8 +293,6 @@ else
             var newVal = value ?? string.Empty;
             var wasEmpty = string.IsNullOrEmpty(_codigoItemIngresado);
             _codigoItemIngresado = newVal;
-
-            // Si pasó de tener valor a quedar vacío (p.ej. ClearButton), resetea captura
             if (!_inReset && !wasEmpty && string.IsNullOrEmpty(newVal))
             {
                 try
@@ -313,103 +307,110 @@ else
             }
         }
     }
+
     private string articuloDescripcion = "";
     private string serieIngresada = "";
     private string productoNoEncontradoMessage = "";
-
-    // NUEVO: Estado visual del código válido
     private bool codigoValido = false;
 
-    // Finalización
     private bool showFinalizeConfirm = false;
-    private bool showSuccess = false;
     private bool isPosting = false;
     private string? postError;
 
-    // Métricas (productos)
     private int TotalProductosIngresados =>
-        groupedComprobantes.Values
-            .SelectMany(c => c)
-            .SelectMany(c => c.Detalles)
-            .Sum(d => d.CantidadIngresada);
+        groupedComprobantes.Values.SelectMany(c => c).SelectMany(c => c.Detalles).Sum(d => d.CantidadIngresada);
 
     private int TotalProductos =>
-        groupedComprobantes.Values
-            .SelectMany(c => c)
-            .SelectMany(c => c.Detalles)
-            .Sum(d => d.Cantidad);
+        groupedComprobantes.Values.SelectMany(c => c).SelectMany(c => c.Detalles).Sum(d => d.Cantidad);
 
     private double ProgressPercent => TotalProductos == 0 ? 0 : (double)TotalProductosIngresados / TotalProductos * 100d;
 
-    // escaneo
     private System.Timers.Timer? escaneoTimer;
 
     protected override async Task OnInitializedAsync()
     {
+        _navReg = Nav.RegisterLocationChangingHandler(OnLocationChanging);
+        AuthService.AuthenticationStateChanged += OnAuthChanged;
+
+        if (!AuthService.IsAuthenticated)
+            return;
+
+        tipoEgreso = await SessionStorage.GetItemAsync<string>($"{guid}-TipoEgreso");
+        IdentificadorOrigen = await SessionStorage.GetItemAsync<string>($"{guid}-SelectedSecuencia");
+
+        if (string.IsNullOrWhiteSpace(tipoEgreso) || string.IsNullOrWhiteSpace(IdentificadorOrigen))
+        {
+            loadError = "No se encontraron parámetros en la sesión.";
+            isLoading = false;
+            return;
+        }
+
+        await LoadDataAsync();
+    }
+
+    private void OnAuthChanged()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            // Protección ante token source ya desechado por Dispose o carrera.
+            try { _cts?.Cancel(); } catch (ObjectDisposedException) { /* ignore */ }
+            isLoading = false;
+            loadError = "Sesión expirada.";
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadDataAsync()
+    {
         try
         {
-            if (!AuthService.IsAuthenticated)
-            {
-                loadError = "Sesión expirada.";
-                return;
-            }
-
             isLoading = true;
             loadError = null;
 
-            var tipoEgreso = await SessionStorage.GetItemAsync<string>($"{guid}-TipoEgreso");
-            var IdentificadorOrigen = await SessionStorage.GetItemAsync<string>($"{guid}-SelectedSecuencia");
-
-            if (string.IsNullOrWhiteSpace(tipoEgreso) || string.IsNullOrWhiteSpace(IdentificadorOrigen))
+            if (!AuthService.IsAuthenticated)
             {
-                loadError = "No se encontraron parámetros en la sesión.";
+                loadError = "Sesión no autenticada.";
+                Nav.NavigateTo("/login", replace: true);
                 return;
             }
 
+            // Crear nueva CTS y desechar la previa
             _cts?.Cancel();
+            _cts?.Dispose();
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
 
-            using var client = HttpClientFactory.CreateClient("Api");
             var urlrequest = $"store/OrigenMovimientoMercaderiaDetalle/{tipoEgreso}/{IdentificadorOrigen}/{guid}";
-            var request = new HttpRequestMessage(HttpMethod.Get, urlrequest);
-            var response = await client.SendAsync(request, ct);
+            var response = await apiClient.GetAsync<OrigenMovimiento>(urlrequest, ct);
 
-            if (response.IsSuccessStatusCode)
+            if ((response?.succeeded ?? false) == false)
             {
-                var apiResult = await response.Content.ReadFromJsonAsync<Result<OrigenMovimiento>>(cancellationToken: ct);
-
-                if (apiResult?.data == null)
-                {
-                    loadError = "No se encontraron datos para la secuencia indicada.";
-                    return;
-                }
-
-                item = apiResult.data;
-
-                if (item.Comprobantes != null)
-                {
-                    groupedComprobantes = item.Comprobantes
-                        .GroupBy(c => c.SeqCompte ?? "Sin Compte")
-                        .ToDictionary(g => g.Key, g => g.ToList());
-
-                    groupKeys = groupedComprobantes.Keys.OrderBy(k => k).ToList();
-
-                    if (groupKeys.Count > 0)
-                    {
-                        await SeleccionarCompte(groupKeys[0]);
-                        _pendingInitialFocus = true;
-                    }
-                }
-            }
-            else
-            {
-                var errorContent = await response.Content.ReadAsStringAsync(ct);
-                var errorObj = System.Text.Json.JsonSerializer.Deserialize<Result<object>>(errorContent);
-
-                loadError = $"Error cargando datos: {errorObj?.message ?? response.ReasonPhrase}";
+                loadError = $"Error cargando datos: {response?.message ?? "Desconocido"}";
+                return;
             }
 
+            if (response?.data is null)
+            {
+                loadError = "No se encontraron datos para la secuencia indicada.";
+                return;
+            }
+
+            item = response.data;
+
+            if (item.Comprobantes != null)
+            {
+                groupedComprobantes = item.Comprobantes
+                    .GroupBy(c => c.SeqCompte ?? "Sin Compte")
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
+                groupKeys = groupedComprobantes.Keys.OrderBy(k => k).ToList();
+
+                if (groupKeys.Count > 0)
+                {
+                    await SeleccionarCompte(groupKeys[0]);
+                    _pendingInitialFocus = true;
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -429,7 +430,7 @@ else
             {
                 await JS.InvokeVoidAsync("EgresoDetalleHeader.init", ".top-header", "#stickySentinel");
             }
-            catch { /* no-op */ }
+            catch { }
         }
 
         if (_pendingInitialFocus && !isLoading)
@@ -437,6 +438,29 @@ else
             await FocusCodigoCapturaAsync();
             _pendingInitialFocus = false;
         }
+
+        if (!string.IsNullOrEmpty(_pendingScrollCompteKey))
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("scrollCompteIntoView", _pendingScrollCompteKey);
+            }
+            catch { }
+            _pendingScrollCompteKey = null;
+        }
+    }
+
+    private async Task<bool> AskBeforeLeavingAsync()
+    {
+        if (!datosCambiados) return false;
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "¿Está seguro de que desea abandonar los cambios?");
+        return !confirmed;
+    }
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        if (!await AskBeforeLeavingAsync()) return;
+        context.PreventNavigation();
     }
 
     string GetTipoName() => item?.TipoOrigen switch
@@ -446,6 +470,24 @@ else
         "E" => "Compt. Egreso/Factur",
         _ => "Secuencia"
     };
+
+    public void Dispose()
+    {
+        // Desuscribir siempre antes de liberar recursos
+        AuthService.AuthenticationStateChanged -= OnAuthChanged;
+
+        try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+        _cts?.Dispose();
+        _cts = null;
+
+        _navReg?.Dispose();
+    }
+
+
+    private void OnDetalleRowClick(GridRowClickEventArgs args)
+    {
+        // Desactivado por ahora
+    }
 
     async Task SeleccionarCompte(string compte)
     {
@@ -465,7 +507,8 @@ else
             selectedBodega = "";
             selectedDetalle = null;
         }
-        ResetCapturaActual();
+        await ResetCapturaActual();
+        _pendingScrollCompteKey = selectedCompte;
         await InvokeAsync(StateHasChanged);
     }
 
@@ -479,7 +522,7 @@ else
 
     private async Task HandleCodigoItemCaptura(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" || e.Code == "Enter" || e.Code == "NumpadEnter")
+        if (e.Key is "Enter" or "NumpadEnter")
         {
             await Task.Delay(50);
             _codigoItemIngresado = codigoItemIngresado?.Trim() ?? string.Empty;
@@ -489,7 +532,7 @@ else
 
     private async Task HandleSerieCaptura(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter" || e.Code == "Enter" || e.Code == "NumpadEnter")
+        if (e.Key is "Enter" or "NumpadEnter")
         {
             await Task.Delay(50);
             serieIngresada = serieIngresada?.Trim() ?? string.Empty;
@@ -497,55 +540,26 @@ else
         }
     }
 
-
-    private async Task HandleCodigoItemInput(ChangeEventArgs e)
-    {
-        codigoItemIngresado = e.Value?.ToString() ?? string.Empty;
-
-        // Reinicia el temporizador cada vez que se detecta una entrada
-        escaneoTimer?.Stop();
-        escaneoTimer?.Dispose();
-
-        escaneoTimer = new System.Timers.Timer(200); // 200ms de espera sin teclear
-        escaneoTimer.Elapsed += async (_, _) =>
-        {
-            escaneoTimer?.Stop();
-            escaneoTimer?.Dispose();
-            escaneoTimer = null;
-
-            await InvokeAsync(async () =>
-            {
-                Console.WriteLine("Código leído: " + codigoItemIngresado);
-                await ValidarCodigoItem();
-            });
-        };
-
-        escaneoTimer.Start();
-    }
-
-
     private async Task ValidarCodigoItem()
     {
-
-        Console.WriteLine($"ValidarCodigoItem : {codigoItemIngresado}");
-
         productoNoEncontradoMessage = "";
 
         if (string.IsNullOrWhiteSpace(codigoItemIngresado) || string.IsNullOrWhiteSpace(selectedCompte))
             return;
 
-        if (selectedDetalle?.CodigoItem == codigoItemIngresado)
+        if (selectedDetalle?.CodigoItem == codigoItemIngresado || selectedDetalle?.CodigoFabrica == codigoItemIngresado)
             return;
 
         var primer = groupedComprobantes[selectedCompte].FirstOrDefault();
         var detalle = primer?.Detalles.FirstOrDefault(d =>
-            string.Equals(d.CodigoItem, codigoItemIngresado, StringComparison.OrdinalIgnoreCase));
+            string.Equals(d.CodigoItem, codigoItemIngresado, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(d.CodigoFabrica, codigoItemIngresado, StringComparison.OrdinalIgnoreCase));
 
         if (detalle != null)
         {
             selectedDetalle = detalle;
             articuloDescripcion = detalle.Descripcion;
-            codigoValido = true; // Marca código correcto (resalta en verde)
+            codigoValido = true;
             serieIngresada = "";
             await FocusSerieCapturaAsync();
         }
@@ -554,44 +568,25 @@ else
             productoNoEncontradoMessage = "Producto no encontrado.";
             selectedDetalle = null;
             articuloDescripcion = string.Empty;
-            codigoValido = false; // Quita estado de válido
+            codigoValido = false;
             await FocusCodigoCapturaAsync();
         }
 
         await InvokeAsync(StateHasChanged);
     }
 
-
-    private async Task<(bool, string)> controlSerie(SerieMovimiento serieMovimiento, string? accion)
+    private async Task<(bool ok, string msg)> controlSerie(SerieMovimiento serieMovimiento, string? accion)
     {
         try
         {
             _cts?.Cancel();
+            _cts?.Dispose();
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
 
-            using var client = HttpClientFactory.CreateClient("Api");
-
-            var urlrequest = $"store/RegistrarSerieMovimiento/{guid}{(!string.IsNullOrEmpty(accion) ? $"?accion={accion}" : "")}";
-            var request = new HttpRequestMessage(HttpMethod.Post, urlrequest)
-            {
-                Content = JsonContent.Create(serieMovimiento)
-            };
-            var response = await client.SendAsync(request, ct);
-
-            if (response.IsSuccessStatusCode)
-            {
-                var result = await response.Content.ReadFromJsonAsync<Result<object>>(cancellationToken: ct);
-                return (result?.succeeded ?? false, result?.message ?? "Error Serie: Error de conectividad");
-            }
-            else
-            {
-                var errorContent = await response.Content.ReadAsStringAsync(ct);
-                var errorObj = System.Text.Json.JsonSerializer.Deserialize<Result<object>>(errorContent);
-                return (true, $"Error Serie: {errorObj?.message ?? response.ReasonPhrase}");
-            }
-
-
+            var urlrequest = $"store/RegistrarSerieMovimiento{(!string.IsNullOrEmpty(accion) ? $"?accion={accion}" : "")}";
+            var response = await apiClient.PostAsync<object>(urlrequest, serieMovimiento, ct);
+            return (response?.succeeded ?? false, response?.message ?? "Error inesperado al registrar serie.");
         }
         catch (Exception ex)
         {
@@ -601,6 +596,7 @@ else
 
     private async Task IngresarSerie()
     {
+        productoNoEncontradoMessage = "";
         if (selectedDetalle == null)
         {
             productoNoEncontradoMessage = "Debe seleccionar un producto válido.";
@@ -608,19 +604,16 @@ else
             return;
         }
 
-
-
         if (string.IsNullOrWhiteSpace(serieIngresada))
         {
             await FocusSerieCapturaAsync();
             return;
         }
 
-
-        if (selectedDetalle.CantidadIngresada >= selectedDetalle.Cantidad * (selectedDetalle.SeriesPorUnidad <= 0 ? 1 : selectedDetalle.SeriesPorUnidad))
+        if (IsDetalleComplete(selectedDetalle))
         {
-            await FocusSerieCapturaAsync();
             productoNoEncontradoMessage = "Cantidad de series ya completa para este artículo.";
+            await FocusSerieCapturaAsync();
             return;
         }
 
@@ -632,22 +625,39 @@ else
             return;
         }
 
-        var (b, msg) = await controlSerie(new SerieMovimiento
+        var (ok, msg) = await controlSerie(new SerieMovimiento
         {
+            Guid = Guid.Parse(guid),
             SeqCompte = selectedCompte,
             CodigoItem = selectedDetalle.CodigoItem,
             Serie = serieIngresada.Trim()
         }, "INS");
 
-        if (!b)
+        if (!ok)
         {
-            await FocusSerieCapturaAsync();
             productoNoEncontradoMessage = msg;
+            await FocusSerieCapturaAsync();
             return;
         }
 
         selectedDetalle.SeriesCapturadas.Add(serieIngresada.Trim());
-        ResetCapturaActual();
+        datosCambiados = true;
+
+        if (IsComprobanteComplete(selectedCompte))
+        {
+            await CheckAndAdvanceComprobanteIfCompleteAsync();
+            return;
+        }
+
+        if (IsDetalleComplete(selectedDetalle))
+        {
+            await ResetCapturaActual();
+            return;
+        }
+
+        serieIngresada = "";
+        productoNoEncontradoMessage = "";
+        await FocusSerieCapturaAsync();
         StateHasChanged();
     }
 
@@ -655,33 +665,36 @@ else
     {
         if (selectedDetalle?.SeriesCapturadas == null) return false;
 
-        var (b, msg) = await controlSerie(new SerieMovimiento
+        var (ok, msg) = await controlSerie(new SerieMovimiento
         {
+            Guid = Guid.Parse(guid),
             SeqCompte = selectedCompte,
             CodigoItem = selectedDetalle.CodigoItem,
             Serie = serie
         }, "DEL");
 
-        if (!b)
+        if (!ok)
         {
-            await FocusSerieCapturaAsync();
             productoNoEncontradoMessage = msg;
+            await FocusSerieCapturaAsync();
             return false;
         }
+
         selectedDetalle.SeriesCapturadas.Remove(serie);
         StateHasChanged();
         return true;
     }
 
-    private void ResetCapturaActual()
+    private async Task ResetCapturaActual()
     {
         serieIngresada = "";
         codigoItemIngresado = "";
         articuloDescripcion = "";
         selectedDetalle = null;
         productoNoEncontradoMessage = "";
-        codigoValido = false; // Limpia el estado visual
-        FocusCodigoCapturaAsync();
+        codigoValido = false;
+        await FocusCodigoCapturaAsync();
+        StateHasChanged();
     }
 
     private int ExpectedSeriesFor(DetalleMovimiento? d)
@@ -691,53 +704,13 @@ else
         return d.Cantidad * spUnit;
     }
 
-    private bool CanFinalize()
-        => item != null && TotalProductosIngresados > 0;
+    private bool CanFinalize() => item != null && TotalProductosIngresados > 0;
 
     private async Task FinalizarAsync()
     {
-        if (item == null) return;
-        postError = null;
-        isPosting = true;
-
-        try
-        {
-            var client = HttpClientFactory.CreateClient("Api");
-            var response = await client.PostAsJsonAsync("store/processOrigenMovimientoMercaderia", item);
-
-            if (!response.IsSuccessStatusCode)
-            {
-                postError = $"Error HTTP {(int)response.StatusCode}: {response.ReasonPhrase}";
-                return;
-            }
-
-            showFinalizeConfirm = false;
-            showSuccess = true;
-        }
-        catch (Exception ex)
-        {
-            postError = $"Error enviando datos: {ex.Message}";
-        }
-        finally
-        {
-            isPosting = false;
-        }
+        await SessionStorage.SetItemAsync($"{guid}-OrigenMovimientoDespacho", item);
+        Nav.NavigateTo($"/Bodega/EgresoComprobanteResumen/{guid}");
     }
-
-    // Evento RowClick (cuando se requiera reactivar)
-    private void OnDetalleRowClick(GridRowClickEventArgs args)
-    {
-        // if (args?.DataItem is DetalleMovimiento dm)
-        // {
-        //     selectedDetalle = dm;
-        //     codigoItemIngresado = dm.CodigoItem;
-        //     articuloDescripcion = dm.Descripcion;
-        //     serieIngresada = "";
-        //     productoNoEncontradoMessage = "";
-        //     StateHasChanged();
-        // }
-    }
-
 
     private async Task FocusCodigoCapturaAsync()
     {
@@ -748,7 +721,7 @@ else
             else
                 await JS.InvokeVoidAsync("focusElementById", "txtCodigoCaptura");
         }
-        catch { /* no-op */ }
+        catch { }
     }
 
     private async Task FocusSerieCapturaAsync()
@@ -766,7 +739,59 @@ else
                 else
                     await JS.InvokeVoidAsync("focusElementById", "txtSerieCaptura");
             }
-            catch { /* no-op */ }
+            catch { }
+        }
+    }
+
+    private int SeriesIngresadasFor(DetalleMovimiento d)
+    {
+        if (d == null) return 0;
+        if (d.TotalSeriesIngresadas > 0) return d.TotalSeriesIngresadas;
+        return d.SeriesCapturadas?.Count ?? 0;
+    }
+
+    private bool IsDetalleComplete(DetalleMovimiento d)
+    {
+        var expected = ExpectedSeriesFor(d);
+        if (expected > 0)
+        {
+            var ingresadas = SeriesIngresadasFor(d);
+            return ingresadas >= expected;
+        }
+        return d.CantidadIngresada >= d.Cantidad;
+    }
+
+    private bool IsComprobanteComplete(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        if (!groupedComprobantes.TryGetValue(key, out var lista) || lista.Count == 0) return false;
+        var comp = lista.First();
+        if (comp.Detalles == null || comp.Detalles.Count == 0) return true;
+        return comp.Detalles.All(IsDetalleComplete);
+    }
+
+    private string? FindNextIncompleteKey(string fromKey)
+    {
+        if (groupKeys == null || groupKeys.Count == 0) return null;
+        var start = Math.Max(0, groupKeys.IndexOf(fromKey));
+        for (int i = 1; i <= groupKeys.Count; i++)
+        {
+            var idx = (start + i) % groupKeys.Count;
+            var key = groupKeys[idx];
+            if (!IsComprobanteComplete(key))
+                return key;
+        }
+        return null;
+    }
+
+    private async Task CheckAndAdvanceComprobanteIfCompleteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(selectedCompte)) return;
+        if (IsComprobanteComplete(selectedCompte))
+        {
+            var next = FindNextIncompleteKey(selectedCompte);
+            if (!string.IsNullOrWhiteSpace(next))
+                await SeleccionarCompte(next);
         }
     }
 }
@@ -796,17 +821,14 @@ else
 
           io.observe(sentinel);
 
-          // Recalcular en resize/orientation change
           window.addEventListener('resize', setHeaderHeight, { passive: true });
           window.addEventListener('orientationchange', setHeaderHeight, { passive: true });
 
-          // Observa cambios de clase (compact) para actualizar altura
           const mo = new MutationObserver(setHeaderHeight);
           mo.observe(header, { attributes: true, attributeFilter: ['class'] });
 
-          // Inicial
           setHeaderHeight();
-        } catch { /* noop */ }
+        } catch { }
       }
     };
 
@@ -817,19 +839,13 @@ else
         }
     };
 
-        window.focusAndCenterById = function (id) {
+    window.focusAndCenterById = function (id) {
         try {
             const host = document.getElementById(id);
             if (!host) return;
-
             const el = host.querySelector('input, textarea, select, [contenteditable="true"], button, a[href], [tabindex]:not([tabindex="-1"])') || host;
-
-            // Si es la primera vez que se llama, esperar un poco antes de aplicar el scroll
             setTimeout(() => {
-                // Desplazar el elemento al centro de la vista
                 el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
-
-                // Enfocar el elemento, evitando el movimiento del scroll
                 setTimeout(() => {
                     if (typeof el.focus === 'function') {
                         try {
@@ -838,12 +854,44 @@ else
                             el.focus();
                         }
                     }
-                }, 50); // Le damos tiempo al scroll para que ocurra primero
-            }, 100); // Este es el pequeño retraso para permitir que el navegador complete el layout
-        } catch { /* no-op */ }
+                }, 50);
+            }, 100);
+        } catch { }
     };
 
+    // NUEVO: desplazamiento horizontal para el comprobante seleccionado
+    window.scrollCompteIntoView = function (key) {
+        try {
+            const strip = document.querySelector('.comprobantes-strip');
+            if (!strip) return;
+            const btn = strip.querySelector('[data-comp-key="' + key + '"]');
+            if (!btn) return;
+
+            const stripRect = strip.getBoundingClientRect();
+            const btnRect = btn.getBoundingClientRect();
+
+            const fullyVisible = btnRect.left >= stripRect.left && btnRect.right <= stripRect.right;
+            if (fullyVisible) return;
+
+            const targetLeft = btn.offsetLeft - (strip.clientWidth - btn.offsetWidth) / 2;
+            strip.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+        } catch { }
+    };
+
+    document.addEventListener("DOMContentLoaded", function() {
+      const input_txtCodigoCaptura = document.getElementsByName('txtCodigoCaptura')[0];
+        input_txtCodigoCaptura?.addEventListener('focus', () => {
+          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        });
+
+        const input_txtSerieCaptura = document.getElementsByName('txtSerieCaptura')[0];
+        input_txtSerieCaptura?.addEventListener('focus', () => {
+          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        });
+    });
+
 </script>
+
 
 <style>
 
@@ -1036,6 +1084,11 @@ else
         color: #4f6b95;
     }
 
+    .comp-dest {
+        font-size: .7rem;
+        color: #4f6b95;
+    }
+
     .comp-date {
         font-size: .75rem;
         color: #697a8c;
@@ -1221,6 +1274,66 @@ else
         font-weight: 600;
     }
 
+    /* NUEVO: title bar con botón de actualizar */
+    .title-bar {
+        position: relative;
+    }
+
+        .title-bar .page-title {
+            margin-right: 44px; /* deja espacio para el botón */
+        }
+
+    .refresh-btn {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 34px;
+        height: 34px;
+        border-radius: 6px;
+        border: 1px solid #e6e9ef;
+        background: var(--dxbl-background, #fff);
+        color: #0d6efd;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color .15s ease, border-color .15s ease, transform .05s ease;
+    }
+
+        .refresh-btn:hover:not(:disabled) {
+            background: #f0f6ff;
+            border-color: #bcd6ff;
+        }
+
+        .refresh-btn:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        .refresh-btn:disabled {
+            opacity: .6;
+            cursor: default;
+        }
+
+    .refresh-icn {
+        width: 18px;
+        height: 18px;
+        display: block;
+    }
+
+    .refresh-btn.spinning .refresh-icn {
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
     /* Grid ajustes */
     .detalles-grid .dxbl-grid-table {
         font-size: .72rem;
@@ -1265,6 +1378,111 @@ else
             border-color: #198754 !important;
         }
 
+    /* Modal simple y responsive (igual que Resumen) */
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, .45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
+    }
+
+    .modal-card {
+        width: min(520px, 96vw);
+        max-height: 92vh;
+        background: #fff;
+        color: #0f172a;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.2);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .75rem 1rem;
+        border-bottom: 1px solid #e6e9ef;
+        background: #f8fafc;
+    }
+
+    .modal-title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .modal-close {
+        border: none;
+        background: transparent;
+        font-size: 1.3rem;
+        line-height: 1;
+        cursor: pointer;
+        color: #334155;
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+    }
+
+        .modal-close:hover {
+            background: #eef2f7;
+        }
+
+    .modal-body {
+        padding: .9rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: .7rem;
+        overflow: auto;
+    }
+
+    .modal-error {
+        margin-top: .25rem;
+        color: #b3261e;
+        font-size: .8rem;
+        font-weight: 600;
+    }
+
+    .modal-footer {
+        padding: .75rem 1rem;
+        border-top: 1px solid #e6e9ef;
+        display: flex;
+        justify-content: flex-end;
+        gap: .5rem;
+        background: #f8fafc;
+    }
+
+    .btn {
+        padding: .45rem .8rem;
+        border-radius: 6px;
+        border: 1px solid #cfd6e4;
+        background: #ffffff;
+        color: #334155;
+        cursor: pointer;
+        font-size: .9rem;
+    }
+
+    .btn-primary {
+        background: #0d6efd;
+        border-color: #0d6efd;
+        color: #fff;
+    }
+
+    .btn-secondary:hover {
+        background: #eef2f7;
+    }
+
+    .btn:disabled {
+        opacity: .6;
+        cursor: not-allowed;
+    }
+
     /* Responsivo general */
     @@media (max-width: 640px) {
         .top-header {
@@ -1273,6 +1491,7 @@ else
 
         .actions-inline {
             flex-direction: row;
+            justify-content: space-between;
         }
 
         .capture-panel {
@@ -1337,8 +1556,8 @@ else
             gap: .45rem;
         }
             /*.top-header .id-box {
-                        display: none;
-                    }*/
+                            display: none;
+                        }*/
 
             .top-header .progress-box {
                 flex-direction: row;
@@ -1403,5 +1622,9 @@ else
     .accordion-content {
         padding: .6rem .6rem .8rem;
         background: var(--dxbl-background, #fff);
+    }
+
+    .retry-btn {
+        background: #0d6efd10;
     }
 </style>

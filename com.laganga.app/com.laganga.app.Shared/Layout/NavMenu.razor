@@ -1,80 +1,70 @@
 ﻿@using com.laganga.app.Shared.Services
+@using System.Collections.Generic;
+@using DevExpress.Blazor.Internal;
 @inject IAuthenticationService AuthService
 @inject ParameterService ParamService
 @inject NavigationManager NavigationManager
 
+<DxMenu Title="@currentUserNickname"
+        Orientation="@Orientation.Vertical"
+        DisplayMode="@MenuDisplayMode.Auto"
+        CollapseItemsToHamburgerMenu="true"
+        CssClass="main-navigation-menu"
+        ItemCssClass="nav-menu-item"
+        ItemClick="HandleItemClick">
+    <Items>
+        <DxMenuItem NavigateUrl="/"
+                    Text="Home"
+                    IconCssClass="bi bi-house-door-fill" />
 
-<div class="dx-menu-container">
-    @if (AuthService.IsAuthenticated)
-    {
-        <DxMenu Title="@currentUserNickname"
-                Orientation="@Orientation.Horizontal"
-                DisplayMode="@MenuDisplayMode.Auto"
-                CollapseItemsToHamburgerMenu="true"
-                CssClass="main-navigation-menu"
-                ItemCssClass="nav-menu-item"
-                >
+        <DxMenuItem Text="Ingreso de Mercadería"
+                    IconCssClass="bi bi-box-seam">
             <Items>
-                <DxMenuItem NavigateUrl="/"
-                            Text="Home"
-                            IconCssClass="bi bi-house-door-fill" />
-
-                <DxMenuItem Text="Ingreso de Mercadería"
-                            IconCssClass="bi bi-box-seam">
-                    <Items>
-                        <DxMenuItem NavigateUrl="/Bodega/IngresoOrdenCompra"
-                                    Text="Orden de Compra"
-                                    IconCssClass="bi bi-file-text" />
-                        <DxMenuItem NavigateUrl="/Bodega/IngresoOrdenConsignada"
-                                    Text="Orden de Consignación"
-                                    IconCssClass="bi bi-file-earmark-text" />
-                        <DxMenuItem NavigateUrl="/Bodega/IngresoOrden"
-                                    Text="Sin Origen"
-                                    IconCssClass="bi bi-file-plus" />
-                    </Items>
-                </DxMenuItem>
-                <DxMenuItem Text="Egreso de Mercadería"
-                            IconCssClass="bi bi-box-seam">
-                    <Items>
-                        <DxMenuItem Text="Origen de Bodega"
-                                    IconCssClass="bi bi-file-text"
-                                    NavigateUrl="/Bodega/EgresoComprobante?tipoPantalla=OrigenBodega" />
-                        <DxMenuItem Text="Origen de Sucursal"
-                                    IconCssClass="bi bi-file-earmark-text"
-                                    NavigateUrl="/Bodega/EgresoComprobante?tipoPantalla=OrigenSucursal" />
-                    </Items>
-                </DxMenuItem>
-                <DxMenuItem NavigateUrl="/pistoleoId"
-                            Text="Generar ID Pistoleo"
-                            IconCssClass="bi bi-qr-code" />
-
-                <DxMenuItem Text="Logout"
-                            IconCssClass="bi bi-box-arrow-right"
-                            @onclick="HandleLogout" />
+                <DxMenuItem NavigateUrl="/Bodega/IngresoOrdenCompra"
+                            Text="Orden de Compra"
+                            IconCssClass="bi bi-file-text" />
+                <DxMenuItem NavigateUrl="/Bodega/IngresoOrdenConsignada"
+                            Text="Orden de Consignación"
+                            IconCssClass="bi bi-file-earmark-text" />
+                <DxMenuItem NavigateUrl="/Bodega/IngresoOrden"
+                            Text="Sin Origen"
+                            IconCssClass="bi bi-file-plus" />
             </Items>
-        </DxMenu>
-    }
-    else
-    {
-        <div class="top-row ps-3 navbar navbar-dark">
-            <div class="container-fluid">
-                <a class="navbar-brand" href="">La Ganga</a>
-            </div>
-        </div>
-    }
-</div>
+        </DxMenuItem>
+
+        <DxMenuItem Text="Egreso de Mercadería"
+                    IconCssClass="bi bi-box-seam">
+            <Items>
+                <DxMenuItem Text="Origen de Bodega"
+                            IconCssClass="bi bi-file-text"
+                            NavigateUrl="/Bodega/EgresoComprobante?tipoPantalla=OrigenBodega" />
+                <DxMenuItem Text="Origen de Sucursal"
+                            IconCssClass="bi bi-file-earmark-text"
+                            NavigateUrl="/Bodega/EgresoComprobante?tipoPantalla=OrigenSucursal" />
+            </Items>
+        </DxMenuItem>
+
+        <DxMenuItem NavigateUrl="/pistoleoId"
+                    Text="Generar ID Pistoleo"
+                    IconCssClass="bi bi-qr-code" />
+
+        <DxMenuItem Text="Logout"
+                    IconCssClass="bi bi-box-arrow-right"
+                    @onclick="HandleLogout" />
+    </Items>
+</DxMenu>
 
 @code {
     private string currentUserNickname => AuthService.CurrentUser?.FindFirst("nickname")?.Value ?? "La Ganga";
+
+    [Parameter] public EventCallback OnNavigate { get; set; }
 
     protected override void OnInitialized()
     {
         AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
     }
-    private void OnAuthenticationStateChanged()
-    {
-        StateHasChanged();
-    }
+
+    private void OnAuthenticationStateChanged() => StateHasChanged();
 
     public void Dispose()
     {
@@ -83,8 +73,19 @@
 
     private async void HandleLogout()
     {
-        
         await AuthService.LogoutAsync();
-        NavigationManager.NavigateTo("/login", replace: true);
+        if (OnNavigate.HasDelegate)
+            await OnNavigate.InvokeAsync();
+        NavigationManager.NavigateTo("/loginU", replace: true);
+    }
+
+    void HandleItemClick(MenuItemClickEventArgs e)
+    {
+        // Cierra el drawer solo si es navegación (tiene URL)
+        if (!string.IsNullOrEmpty(e.ItemInfo?.NavigateUrl))
+        {
+            if (OnNavigate.HasDelegate)
+                OnNavigate.InvokeAsync();
+        }
     }
 }

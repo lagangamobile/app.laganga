@@ -1,0 +1,353 @@
+﻿@page "/loginU"
+@layout com.laganga.app.Shared.Layout.EmptyLayout
+@using com.laganga.app.Shared.Services
+@inject IAuthenticationService AuthService
+@inject NavigationManager NavigationManager
+
+<div class="login-page-root">
+    <div class="login-header">
+        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuByrTM7O9ssZ_ftQpVPZm2RXVAEfrh5I8_Cmj7sW8WWfkuwrdr94etFt-aszpXJaYtfEJmB0Y-K6Zlm3695lp5vY6Vi5g4LQfECi0waxgdfMW4YJW6cz66c8lys75lll0mwG1EiCOFXZfkDaI3TIt9PtvN3eC_0t3th4dlQA6PIgHlYnv-FO9BVZsyPNkjNL2Zmdx4sDmCNexnhqdMrV7nJCLJualZTeQ1_14o1LuPZWuSJs4SpvNve0WaVaFG3_zqGjVMmZ4jXCkA"
+             alt="Logo" class="login-logo">
+    </div>
+
+    <div class="login-body container-fluid">
+        <div class="row justify-content-center">
+            <div class="col-12 col-md-8 col-lg-6 col-xl-5 login-form-wrapper">
+
+                <h1 class="text-center fw-bold mb-2 fs-2 text-dark">Bienvenido</h1>
+                <p class="text-center text-secondary mb-4">Inicia sesión para continuar</p>
+
+                @if (!string.IsNullOrEmpty(error))
+                {
+                    <div class="alert alert-danger">@error</div>
+                }
+
+                <EditForm Model="this" OnValidSubmit="HandleLogin">
+                    <DataAnnotationsValidator />
+                    <div class="mb-3">
+                        <label for="username" class="form-label fw-medium small">Usuario</label>
+                        <div class="custom-input-wrapper">
+                            <div class="custom-input-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                     fill="currentColor" width="20" height="20">
+                                    <path fill-rule="evenodd"
+                                          d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z"
+                                          clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <InputText id="username" class="form-control custom-input"
+                                       @bind-Value="Username" placeholder="Tu nombre de usuario" />
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="password" class="form-label fw-medium small">Contraseña</label>
+                        <div class="custom-input-wrapper">
+                            <div class="custom-input-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+                                     fill="currentColor" width="20" height="20">
+                                    <path fill-rule="evenodd"
+                                          d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z"
+                                          clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <InputText id="password" type="password" class="form-control custom-input"
+                                       @bind-Value="Password" placeholder="Tu contraseña" />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="remember-me" @bind="RememberMe">
+                            <label class="form-check-label small" for="remember-me">
+                                Recordarme
+                            </label>
+                        </div>
+                        <a href="#" class="text-secondary-custom small fw-medium">¿Olvidaste tu contraseña?</a>
+                    </div>
+
+                    <button type="submit" class="btn btn-custom-primary shadow-sm" disabled="@isLoading">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                            <span class="ms-2">Autenticando...</span>
+                        }
+                        else
+                        {
+                            <span>Iniciar Sesión</span>
+                        }
+                    </button>
+                </EditForm>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="login-footer">
+        <p>© 2025 Grupo Empresarial. Todos los derechos reservados.</p>
+    </div>
+</div>
+
+@code {
+    public string? Username { get; set; }
+    public string? Password { get; set; }
+    public bool RememberMe { get; set; }
+    private string? error;
+    private bool isLoading;
+
+    private async Task HandleLogin()
+    {
+        error = null;
+        isLoading = true;
+        try
+        {
+            await AuthService.LoginAsync(Username, Password);
+            if (AuthService.IsAuthenticated)
+                NavigationManager.NavigateTo("/", replace: true);
+            else
+                error = "No se recibió token de autenticación.";
+        }
+        catch (NetworkUnavailableException nex)
+        {
+            error = nex.Message;
+        }
+        catch (Exception ex)
+        {
+            error = "Error: " + ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
+
+<style>
+    :root {
+        --color-primary: #000064;
+        --color-secondary: #5bd0ef;
+        --bg-light: #ffffff;
+        --bg-dark: #0d1117;
+    }
+
+    .login-page-root {
+        background-color: var(--bg-light);
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        font-family: system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    }
+
+    .login-header {
+        background-color: var(--color-primary);
+        padding: 3rem 1rem 5rem 1rem;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-grow: 1;
+    }
+
+    .login-logo {
+        width: 12rem;
+        margin-bottom: 1rem;
+        max-width: 100%;
+        height: auto;
+    }
+
+    .login-body {
+        background-color: var(--bg-light);
+        border-top-left-radius: 1.5rem;
+        border-top-right-radius: 1.5rem;
+        margin-top: -2rem;
+        padding: 2rem;
+        flex-grow: 2;
+        position: relative;
+    }
+
+    .login-form-wrapper {
+        max-width: 100%;
+    }
+
+    .custom-input-wrapper {
+        position: relative;
+        margin-bottom: 1.5rem;
+    }
+
+    .custom-input-icon {
+        position: absolute;
+        top: 50%;
+        left: 0.75rem;
+        transform: translateY(-50%);
+        color: #9ca3af;
+        width: 24px;
+        height: 24px;
+        pointer-events: none;
+    }
+
+    .form-control.custom-input {
+        padding-left: 2.5rem;
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid #d1d5db;
+        font-size: .95rem;
+    }
+
+        .form-control.custom-input:focus {
+            border-color: var(--color-secondary);
+            box-shadow: 0 0 0 0.25rem rgba(91,208,239,0.25);
+        }
+
+    .btn-custom-primary {
+        background-color: var(--color-primary);
+        color: white;
+        width: 100%;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        font-weight: 500;
+        border: none;
+        font-size: .95rem;
+    }
+
+        .btn-custom-primary:hover {
+            background-color: #000050;
+            color: white;
+        }
+
+    .text-secondary-custom {
+        color: var(--color-secondary);
+        text-decoration: none;
+    }
+
+        .text-secondary-custom:hover {
+            opacity: .8;
+        }
+
+    .form-check-input:checked {
+        background-color: var(--color-secondary);
+        border-color: var(--color-secondary);
+    }
+
+    .login-footer {
+        text-align: center;
+        padding: 1rem;
+        font-size: .75rem;
+        color: #6b7280;
+    }
+
+    @@media (prefers-color-scheme: dark) {
+        .login-page-root,
+        .login-body {
+            background-color: var(--bg-dark);
+            color: white;
+        }
+
+        .form-control.custom-input {
+            background-color: #1f2937;
+            border-color: #374151;
+            color: white;
+        }
+
+        h1 {
+            color: white !important;
+        }
+
+        p {
+            color: #9ca3af !important;
+        }
+    }
+
+    @@media (max-width: 520px) {
+        .login-header {
+            padding: 2rem 1rem 3rem;
+        }
+
+        .login-logo {
+            width: 8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-body {
+            margin-top: -1.25rem;
+            padding: 1.25rem 1rem 1.5rem;
+            border-top-left-radius: 1rem;
+            border-top-right-radius: 1rem;
+        }
+
+        h1.fs-2 {
+            font-size: 1.5rem !important;
+            margin-bottom: .75rem;
+        }
+
+        p {
+            font-size: .85rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .custom-input-wrapper {
+            margin-bottom: 1.1rem;
+        }
+
+        .form-control.custom-input {
+            padding-top: .65rem;
+            padding-bottom: .65rem;
+            font-size: .9rem;
+        }
+
+        label.form-label.small {
+            font-size: .7rem;
+            letter-spacing: .25px;
+        }
+
+        .btn-custom-primary {
+            padding: .65rem;
+            font-size: .9rem;
+        }
+
+        .d-flex.justify-content-between.align-items-center.mb-4 {
+            margin-bottom: 1.25rem !important;
+        }
+
+        .login-footer {
+            padding: .6rem .5rem;
+            font-size: .65rem;
+        }
+    }
+
+    @@media (max-width: 520px) and (max-height: 720px) {
+        .login-header {
+            padding: 1.5rem 1rem 2.25rem;
+        }
+
+        .login-body {
+            padding: 1rem .85rem 1.25rem;
+        }
+
+        h1.fs-2 {
+            font-size: 1.4rem !important;
+        }
+
+        p {
+            margin-bottom: 1rem;
+        }
+    }
+
+    @@media (max-width: 520px) and (max-height: 660px) {
+        .login-header {
+            padding: 1.25rem 1rem 1.75rem;
+        }
+
+        .login-body {
+            margin-top: -1rem;
+            padding: .85rem .75rem 1rem;
+        }
+
+        .custom-input-wrapper {
+            margin-bottom: .9rem;
+        }
+
+        .btn-custom-primary {
+            margin-top: .25rem;
+        }
+    }
+</style>

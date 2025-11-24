@@ -65,7 +65,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Services\AuthenticationService.cs" />
+    <Compile Remove="Services\MauiAuthenticationBrowser.cs" />
     <Compile Remove="Services\NetworkStatusService.cs" />
+    <Compile Remove="Services\ResilientApiHandler.cs" />
+    <Compile Remove="Services\TokenAuthorizationMessageHandler.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -81,7 +85,7 @@
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.0" />
-    <PackageReference Include="Microsoft.Maui.Essentials" Version="9.0.110" />
+    <PackageReference Include="Microsoft.Maui.Essentials" Version="9.0.111" />
   </ItemGroup>
 
   <ItemGroup>

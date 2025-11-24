@@ -2,7 +2,9 @@
 @using com.laganga.app.Shared.Services
 @inject IAuthenticationService AuthService
 @inject NavigationManager NavigationManager
+@inject LayoutService LayoutService
 @DxResourceManager.RegisterTheme(Themes.Fluent)
+@implements IDisposable
 
 <Router AppAssembly="typeof(Layout.MainLayout).Assembly">
     <Found Context="routeData">
@@ -18,28 +20,63 @@
 </Router>
 
 @code {
+    private IDisposable? _navReg;
+
+    protected override void OnInitialized()
+    {
+        _navReg = NavigationManager.RegisterLocationChangingHandler(OnLocationChanging);
+        AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        HandleAuthenticationRedirect();
+    }
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        LayoutService.CloseDrawer();
+
+        var target = context.TargetLocation;
+
+        if (!AuthService.IsAuthenticated && !IsLoginUri(target))
+        {
+            context.PreventNavigation();
+            NavigationManager.NavigateTo("/loginU", forceLoad: true, replace: true);
+            return;
+        }
+
+        if (AuthService.IsAuthenticated && IsLoginUri(target))
+        {
+            context.PreventNavigation();
+            NavigationManager.NavigateTo("/", replace: true);
+            return;
+        }
+
+        await Task.CompletedTask;
+    }
+
     protected override async Task OnInitializedAsync()
     {
-        HandleAuthenticationRedirect();
-        AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
         await Task.CompletedTask;
+    }
+
+    private static bool IsLoginUri(string target)
+    {
+        if (!Uri.TryCreate(target, UriKind.Absolute, out var uri))
+            return target.EndsWith("/loginU", StringComparison.OrdinalIgnoreCase);
+
+        var path = uri.AbsolutePath.TrimEnd('/');
+        return path.Equals("/loginU", StringComparison.OrdinalIgnoreCase);
     }
 
     private void HandleAuthenticationRedirect()
     {
         if (AuthService.IsAuthenticated)
         {
-            if (NavigationManager.Uri.EndsWith("/login", StringComparison.OrdinalIgnoreCase))
-            {
+            if (IsLoginUri(NavigationManager.Uri))
                 NavigationManager.NavigateTo("/", replace: true);
-            }
         }
         else
         {
-            if (!NavigationManager.Uri.EndsWith("/login", StringComparison.OrdinalIgnoreCase))
-            {
-                NavigationManager.NavigateTo("/login", forceLoad: true, replace: true);
-            }
+            if (!IsLoginUri(NavigationManager.Uri))
+                NavigationManager.NavigateTo("/loginU", forceLoad: true, replace: true);
         }
     }
 
@@ -52,5 +89,6 @@
     public void Dispose()
     {
         AuthService.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        _navReg?.Dispose();
     }
 }

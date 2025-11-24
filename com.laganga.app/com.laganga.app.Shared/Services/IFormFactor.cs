@@ -6,5 +6,4 @@ public interface IFormFactor
 {
     public string GetFormFactor();
     public string GetPlatform();
-    public Task<OidcClient> GetClientOidc();
 }

@@ -6,12 +6,10 @@ namespace com.laganga.app.Services;
 public class FormFactor : IFormFactor
 {
     // Declara una variable para almacenar la instancia de OidcClient
-    private readonly OidcClient _oidcClient;
 
     // El constructor recibe OidcClient como un parámetro inyectado
-    public FormFactor(OidcClient oidcClient)
+    public FormFactor()
     {
-        _oidcClient = oidcClient;
     }
 
     public string GetFormFactor()
@@ -24,8 +22,4 @@ public class FormFactor : IFormFactor
         return DeviceInfo.Platform.ToString() + " - " + DeviceInfo.VersionString;
     }
 
-    public Task<OidcClient> GetClientOidc()
-    {
-        return Task.FromResult(_oidcClient);
-    }
 }

@@ -1,20 +1,192 @@
 ﻿@inherits LayoutComponentBase
+@using System.Collections.Generic;
+@using DevExpress.Blazor.Internal;
+@inject com.laganga.app.Shared.Services.LayoutService LayoutService
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
+<div class="card no-border layout-root overflow-hidden">
+    <div class="card-header no-border p-2 bg-ganga">
+        <DxToolbar>
+            <Items>
+                <DxToolbarItem Alignment="ToolbarItemAlignment.Right"
+                               Attributes="@(GetToolbarButtonAttributes(LayoutService.IsDrawerOpen, "Menú"))"
+                               BeginGroup="true"
+                               Click="ToggleInfo"
+                               CssClass="demo-drawer-toggle-button">
+                    <Template>
+                        <div class="@($"header__burger {(LayoutService.IsDrawerOpen ? "active" : "")}")"><i></i><i></i><i></i></div>
+                    </Template>
+                </DxToolbarItem>
+            </Items>
+        </DxToolbar>
     </div>
 
-    <main>      
-        <article class="content px-4">
-            <com.laganga.app.Shared.Pages.ConnectivityBanner />
-            @Body
-        </article>
-    </main>
+    <div class="card-body p-0 overflow-hidden">
+        <DxDrawer @bind-IsOpen="LayoutService.IsDrawerOpen"
+                  Mode="DrawerMode.Overlap"
+                  Position="DrawerPosition.Right"
+                  PanelWidth="225px"
+                  aria-label="Main Menu Drawer"
+                  CssClass="full-height-drawer">
+
+            <BodyTemplate>
+                <NavMenu OnNavigate="CloseInfo" />
+            </BodyTemplate>
+
+            <TargetContent>
+                <div class="page page-content-wrapper">
+                    <main class="main-wrapper">
+                        <article class="content px-4">
+                            <com.laganga.app.Shared.Pages.ConnectivityBanner />
+                            @Body
+                        </article>
+                    </main>
+                </div>
+
+                <div id="blazor-error-ui" data-nosnippet>
+                    An unhandled error has occurred.
+                    <a href="." class="reload">Reload</a>
+                    <span class="dismiss">🗙</span>
+                </div>
+            </TargetContent>
+
+        </DxDrawer>
+    </div>
 </div>
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
-</div>
+@code {
+    protected override void OnInitialized()
+    {
+        LayoutService.DrawerStateChanged += OnDrawerStateChanged;
+    }
+
+    void OnDrawerStateChanged() => InvokeAsync(StateHasChanged);
+
+    void ToggleInfo() => LayoutService.ToggleDrawer();
+
+    void CloseInfo() => LayoutService.CloseDrawer();
+
+    public static Dictionary<string, object> GetToolbarButtonAttributes(bool isOpen, string drawerName = null)
+    {
+        if (!string.IsNullOrEmpty(drawerName))
+            drawerName += " ";
+        return new Dictionary<string, object> {
+            { A11yAriaAttributeUtils.AriaLabel, isOpen ? $"Cerrar {drawerName}Drawer" : $"Abrir {drawerName}Drawer" },
+            { A11yAriaAttributeUtils.AriaPressed, isOpen.ToString() }
+        };
+    }
+
+    public void Dispose()
+    {
+        LayoutService.DrawerStateChanged -= OnDrawerStateChanged;
+    }
+}
+
+<style>
+    .bg-ganga{
+        background: #000064;
+    }
+    .layout-root {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+        .layout-root > .card-body {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+    .full-height-drawer,
+    .full-height-drawer .dxbl-drawer-wrapper,
+    .full-height-drawer .dxbl-drawer-target,
+    .full-height-drawer .dxbl-drawer-panel {
+        height: 100%;
+        max-height: 100%;
+    }
+
+    .page-content-wrapper,
+    .main-wrapper,
+    .dxbl-drawer-target-content {
+        height: 100%;
+    }
+
+    .dxbl-drawer-content:has(.demo-drawer-overview-right) {
+        padding: 0;
+    }
+
+    .demo-drawer-overview-right .dxbl-drawer-header,
+    .demo-drawer-overview-right .dxbl-drawer-body,
+    .demo-drawer-overview-right .dxbl-drawer-footer {
+        width: 225px;
+    }
+
+    .demo-drawer .dxbl-drawer-content {
+        font-size: var(--dxbl-drawer-panel-font-size);
+        line-height: var(--dxbl-drawer-panel-line-height);
+        overflow: auto;
+        padding: var(--dxbl-drawer-panel-padding-y) var(--dxbl-drawer-panel-padding-x);
+    }
+
+    .demo-drawer:has(.demo-drawer-menu) {
+        --dxbl-drawer-panel-body-padding-x: 0;
+        --dxbl-drawer-panel-body-padding-y: 0;
+    }
+
+    .dxbl-menu.demo-drawer-menu {
+        --dxbl-menu-top-left-border-radius: 0;
+        --dxbl-menu-top-right-border-radius: 0;
+        --dxbl-menu-bottom-left-border-radius: 0;
+        --dxbl-menu-bottom-right-border-radius: 0;
+    }
+
+    .header__burger {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+        width: 24px;
+        margin-left: auto;
+    }
+
+        .header__burger i {
+            width: 100%;
+            height: 2px;
+            background-color: #fff;
+            border-radius: 13px;
+            transition: 0.4s;
+        }
+
+        .header__burger.active i:nth-child(1) {
+            transform: rotate(45deg) translate(4px, 4px);
+        }
+
+        .header__burger.active i:nth-child(2) {
+            opacity: 0;
+        }
+
+        .header__burger.active i:nth-child(3) {
+            transform: rotate(-45deg) translate(4px, -5px);
+        }
+
+    .dxbl-toolbar .dxbl-btn:focus,
+    .dxbl-toolbar .dxbl-btn:focus-visible {
+        outline: none;
+        box-shadow: none;
+    }
+
+    /* Versión accesible opcional: solo quitar en clic de ratón
+           y dejar un foco visible para teclado */
+    .dxbl-toolbar .dxbl-btn:focus-visible {
+        outline: none; /* Cambia a tu color de marca */
+        outline-offset: 2px;
+    }
+    /* Detecta interacción de puntero y elimina el foco visible inmediatamente */
+    .dxbl-toolbar .dxbl-btn[data-pointer="true"]:focus-visible {
+        outline: none;
+    }
+    .no-border{
+        border: 0;
+        border-radius: unset;
+    }
+</style>

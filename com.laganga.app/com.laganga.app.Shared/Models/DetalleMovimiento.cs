@@ -12,6 +12,7 @@ public interface IDetalleMovimiento
     string Descripcion { get; set; }
     int Cantidad { get; set; }
     int SeriesPorUnidad { get; set; }
+    string CodigoFabrica { get; set; }
     List<string> SeriesCapturadas { get; set; }
 }
 
@@ -21,10 +22,12 @@ public class DetalleMovimiento : IDetalleMovimiento
     public string Descripcion { get; set; }
     public int Cantidad { get; set; }
     public int SeriesPorUnidad { get; set; }
+    public string CodigoFabrica { get; set; }
     public List<string> SeriesCapturadas { get; set; }
+    public int CantidadIngresada => SeriesCapturadas.Count() > 0 ? SeriesCapturadas.Count() / SeriesPorUnidad : 0;
     public int TotalSeriesEsperadas => Cantidad * SeriesPorUnidad;
     public int TotalSeriesIngresadas => SeriesCapturadas.Count();
-    public int CantidadIngresada => SeriesCapturadas.Count() > 0 ? SeriesCapturadas.Count()/SeriesPorUnidad : 0;
+    
 }
 
 

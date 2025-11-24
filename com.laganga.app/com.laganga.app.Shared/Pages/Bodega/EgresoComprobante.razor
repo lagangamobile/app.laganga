@@ -2,13 +2,28 @@
 @using com.laganga.app.Shared.Models
 @using com.laganga.app.Shared.Services
 @implements IDisposable
-@inject NavigationManager NavigationManager
+@inject NavigationManager Nav
 @inject ParameterService ParamService
-@inject IJSRuntime JSRuntime
-@inject IHttpClientFactory HttpClientFactory
+@inject IAuthenticationService AuthService
+@inject IApiGangaClient apiClient
+@inject IJSRuntime JS
 
-<h3 class="page-title">Egreso de Comprobantes</h3>
+<div class="title-bar">
+    <h3 class="page-title">Egreso de Comprobantes</h3>
 
+    <button type="button"
+            class="@($"refresh-btn{(isLoading ? " spinning" : "")}")"
+            @onclick="LoadDataAsync"
+            disabled="@isLoading"
+            aria-label="Actualizar"
+            title="Actualizar">
+        <svg class="refresh-icn" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <polyline points="21 3 21 9 15 9" />
+        </svg>
+    </button>
+</div>
 
 <!-- Encabezado fijo dentro del contenedor -->
 <div class="top-header">
@@ -29,36 +44,53 @@
     </div>
 
     <!-- Panel de Ingreso Manual -->
-    <div class="manual-grid">
-        <DxTextBox LabelText="@GetTipoName()"
-                   @bind-Text="@selectedIdentificadorOrigen"
-                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                   BindValueMode="BindValueMode.OnInput"
-                   NullText="@($"Ingrese {GetTipoName()}")"
-                   SizeMode="SizeMode.Small"
-                   CssClass="manual-input" />
-        @* filters-Identificador *@
-        @if (PreferredTipoEgreso == "E")
-        {
-            <DxTextBox LabelText="Bodega"
-                       @bind-Text="@selectedBodega"
+    @if ((AuthService.CurrentUser?.FindFirst("control")?.Value ?? "no").Equals("total"))
+    {
+        <div class="manual-grid">
+            <DxTextBox LabelText="@GetTipoName()"
+                       @bind-Text="@selectedIdentificadorOrigen"
                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
                        BindValueMode="BindValueMode.OnInput"
-                       NullText="Ingrese Bodega"
+                       NullText="@($"Ingrese {GetTipoName()}")"
                        SizeMode="SizeMode.Small"
-                       CssClass="manual-input"
-                       InputId="tbClearButton" />
-        }
+                       CssClass="manual-input" />
+            @* filters-Identificador *@
+            @if (PreferredTipoEgreso == "E")
+            {
+                <DxTextBox LabelText="Bodega"
+                           @bind-Text="@selectedBodega"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                           BindValueMode="BindValueMode.OnInput"
+                           NullText="Ingrese Bodega"
+                           SizeMode="SizeMode.Small"
+                           CssClass="manual-input"
+                           InputId="tbClearButton" />
+            }
 
-        <div class="manual-actions">
-            <DxButton Text="Abrir"
-                      Click="() => OnAbrirClick(selectedIdentificadorOrigen)"
-                      ButtonType="ButtonType.Normal" />
+            <div class="manual-actions">
+                <DxButton Text="Abrir"
+                          Click="() => OnAbrirClick(selectedIdentificadorOrigen)"
+                          ButtonType="ButtonType.Normal" />
+            </div>
+        </div>
+    }
+    
+
+    <div class="manual-grid">
+        <div class="filters-row">
+            <DxTextBox LabelText="Buscar"
+                       @bind-Text="searchText"
+                       BindValueMode="BindValueMode.OnInput"
+                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                       NullText="Buscar por # visible o ID"
+                       SizeMode="SizeMode.Small"
+                       aria-label="Buscar secuencia"
+                       CssClass="manual-input" />
         </div>
     </div>
 
     <!-- Buscador de ítems -->
-    
+
 </div>
 
 <!-- Zona central que se desplaza -->
@@ -80,16 +112,7 @@
     else
     {
 
-        <div class="filters-row">
-            <DxTextBox LabelText="Buscar"
-                       @bind-Text="searchText"
-                       BindValueMode="BindValueMode.OnInput"
-                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                       NullText="Buscar por # visible o ID"
-                       SizeMode="SizeMode.Small"
-                       aria-label="Buscar secuencia"
-                       CssClass="manual-input" />
-        </div>
+        
 
         <!-- Listado visual en 2 columnas, desplazamiento vertical -->
         <section class="items-section">
@@ -122,33 +145,282 @@
     }
 </div>
 
-@* <div class="footer-space"></div> *@
+@* Modal de confirmación (reemplaza DxPopup) *@
+@if (showPopup)
+{
+    <div class="modal-backdrop" @onclick="() => showPopup = false">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="egresoConfirmTitle" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h4 id="egresoConfirmTitle" class="modal-title">Toma Egresos Comprobantes - @GetTipoName()</h4>
+                <button type="button"
+                        class="modal-close"
+                        title="Cerrar"
+                        aria-label="Cerrar"
+                        @onclick="() => showPopup = false">
+                    ×
+                </button>
+            </div>
+            <div class="modal-body">
+                <div>
+                    Esta seguro que desea tomar el egreso de comprobantes para la @GetTipoName():
+                    <strong>@selectedIdentificadorOrigenVisible</strong> ?
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" type="button" @onclick="() => showPopup = false">Cerrar</button>
+
+                @if (!(selectedGuidId == null || selectedGuidId == Guid.Empty))
+                {
+                    <button class="btn btn-primary"
+                            type="button"
+                            @onclick="@(() => AbrirComprobanteDetalle(selectedGuidId))">
+                        Continuar
+                    </button>
+                }
+
+                <button class="btn btn-primary"
+                        type="button"
+                        @onclick="@(() => AbrirComprobanteDetalle())">
+                    Nuevo
+                </button>
+            </div>
+        </div>
+    </div>
+}
 
 
-<!-- Popup Confirmación (overlay, no afecta el layout fijo) -->
-<DxPopup @bind-Visible="showPopup"
-         Position="PopupPosition.Center"
-         ShowFooter="false"
-         Width="340px"
-         CloseOnOutsideClick="true">
-    <HeaderTemplate>
-        Toma Egresos Comprobantes - @GetTipoName()
-    </HeaderTemplate>
-    <BodyTemplate>
-        <div>
-            Esta seguro que desea tomar el egreso de comprobantes para la @GetTipoName():
-            <strong>@selectedIdentificadorOrigenVisible</strong> ?
-        </div>
-        <div class="dialog-actions mt-2">
-            <DxButton Text="Confirmar"
-                      CssClass="finalize"
-                      Click="@(() => AbrirSecuencia(selectedIdentificadorOrigen))" />
-            <DxButton Text="Cerrar"
-                      ButtonType="ButtonType.Normal"
-                      Click="() => showPopup = false" />
-        </div>
-    </BodyTemplate>
-</DxPopup>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "tipoPantalla")]
+    public string? tipoPantalla { get; set; } = "";
+    private string? _lastTipoPantalla;
+
+    public bool datosCambiados { get; set; } = false;
+
+    List<TipoEgresoItem> ItemsTipoEgreso { get; set; } = new();
+    string PreferredTipoEgreso { get; set; } = string.Empty;
+
+    List<OrigenMovimiento> GridData { get; set; } = new();
+    DxGrid? Grid { get; set; }
+
+    string searchText { get; set; } = string.Empty;
+
+    IReadOnlyList<OrigenMovimiento> FilteredGridData =>
+        string.IsNullOrWhiteSpace(searchText)
+            ? GridData
+            : GridData.Where(it =>
+                (!string.IsNullOrEmpty(it.IdentificadorOrigenVisible) &&
+                 it.IdentificadorOrigenVisible.Contains(searchText, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrEmpty(it.IdentificadorOrigen) &&
+                 it.IdentificadorOrigen.Contains(searchText, StringComparison.OrdinalIgnoreCase)))
+              .ToList();
+
+    bool isLoading = false;
+    string? loadError;
+
+    CancellationTokenSource? _cts;
+    IDisposable? _navReg;
+
+    bool showPopup = false;
+    string selectedIdentificadorOrigen = default!;
+    string selectedIdentificadorOrigenVisible = default!;
+    Guid? selectedGuidId = null;
+    string selectedBodega = "000";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _navReg = Nav.RegisterLocationChangingHandler(OnLocationChanging);
+        AuthService.AuthenticationStateChanged += OnAuthChanged;
+        initParametros();
+
+        if (!AuthService.IsAuthenticated)
+            return;
+
+        await LoadDataAsync();
+    }
+
+    private void OnAuthChanged()
+    {
+        if (!AuthService.IsAuthenticated)
+        {
+            try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+            _cts?.Dispose();
+            _cts = null;
+            isLoading = false;
+            loadError = "Sesión expirada.";
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.IsNullOrWhiteSpace(tipoPantalla))
+            tipoPantalla = "OrigenBodega";
+
+        if (_lastTipoPantalla == tipoPantalla)
+            return;
+
+        _lastTipoPantalla = tipoPantalla;
+        initParametros();
+        await LoadDataAsync();
+    }
+
+    string GetTipoName()
+        => ItemsTipoEgreso.FirstOrDefault(p => p.IdValue == PreferredTipoEgreso)?.DisplayText ?? string.Empty;
+
+    public void Dispose()
+    {
+        AuthService.AuthenticationStateChanged -= OnAuthChanged;
+        try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+        _cts?.Dispose();
+        _cts = null;
+        _navReg?.Dispose();
+    }
+
+    private void initParametros()
+    {
+        if (_lastTipoPantalla is null) _lastTipoPantalla = tipoPantalla;
+        switch (tipoPantalla)
+        {
+            case "OrigenBodega":
+                ItemsTipoEgreso = new() {
+                    new() { DisplayText = "ID Cubicaje", IdValue = "C" },
+                    new() { DisplayText = "ID HojaRuta", IdValue = "H" },
+                    new() { DisplayText = "Compt. Egreso/Factura", IdValue = "E" }
+                };
+                break;
+            case "OrigenSucursal":
+                ItemsTipoEgreso = new() {
+                    new() { DisplayText = "Compt. Egreso/Factura", IdValue = "E" }
+                };
+                break;
+            default:
+                ItemsTipoEgreso = new();
+                break;
+        }
+
+        if (ItemsTipoEgreso.Count > 0)
+            PreferredTipoEgreso = ItemsTipoEgreso[0].IdValue;
+    }
+
+    private async Task OnPreferredTipoEgresoChanged(string newValue)
+    {
+        PreferredTipoEgreso = newValue;
+        searchText = string.Empty;
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        loadError = null;
+        isLoading = true;
+        GridData.Clear();
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        try
+        {
+            if (!AuthService.IsAuthenticated)
+            {
+                loadError = "Sesión no autenticada.";
+                Nav.NavigateTo("/login", replace: true);
+                return;
+            }
+
+            var urlRequest = $"store/OrigenMovimientoMercaderia/{PreferredTipoEgreso}";
+            var response = await apiClient.GetAsync<List<OrigenMovimiento>>(urlRequest, ct);
+
+            if ((response?.succeeded ?? false) == false)
+            {
+                loadError = response?.message ?? $"Error interno Seguimiento: {response?.message}";
+                return;
+            }
+
+            if (response?.data is null)
+            {
+                loadError = "Respuesta sin datos.";
+                return;
+            }
+
+            GridData = response.data;
+        }
+        catch (OperationCanceledException) { }
+        catch (HttpRequestException ex)
+        {
+            loadError = $"Error HTTP: {ex.Message}";
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            loadError = $"Error parseando JSON: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task<bool> AskBeforeLeavingAsync()
+    {
+        if (!datosCambiados) return false;
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "¿Está seguro de que desea abandonar los cambios?");
+        return !confirmed;
+    }
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+    {
+        if (!await AskBeforeLeavingAsync()) return;
+        context.PreventNavigation();
+    }
+
+    void OnAbrirClick(string IdentificadorOrigen)
+    {
+        if (!string.IsNullOrEmpty(IdentificadorOrigen))
+        {
+            var item = GridData.FirstOrDefault(x => x.IdentificadorOrigen == IdentificadorOrigen);
+            if (item != null)
+            {
+                selectedIdentificadorOrigen = IdentificadorOrigen;
+                selectedIdentificadorOrigenVisible = item.IdentificadorOrigenVisible;
+                selectedGuidId = item.Guid;
+                showPopup = true;
+            }
+            else
+            {
+                selectedIdentificadorOrigen = IdentificadorOrigen;
+                selectedIdentificadorOrigenVisible = IdentificadorOrigen;
+                selectedGuidId = null;
+                showPopup = true;
+            }
+        }
+    }
+
+    private async void AbrirComprobanteDetalle(Guid? guid = null)
+    {
+        if (guid == null || guid == Guid.Empty) guid = Guid.NewGuid();
+
+        await SessionStorage.SetItemAsync($"{guid}-TipoEgreso", PreferredTipoEgreso);
+        await SessionStorage.SetItemAsync($"{guid}-SelectedSecuencia", selectedIdentificadorOrigen);
+        Nav.NavigateTo($"/Bodega/EgresoComprobanteDetalle/{guid}", true, true);
+    }
+
+    public class TipoEgresoItem
+    {
+        public string DisplayText { get; set; } = string.Empty;
+        public string IdValue { get; set; } = string.Empty;
+    }
+}
+
+
+
 
 <style>
     /* Layout base: ocupa toda la ventana y fija header/footer */
@@ -337,6 +609,153 @@
         align-items: center;
     }
 
+    /* Modal simple y responsive (igual que Resumen) */
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, .45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
+    }
+
+    .modal-card {
+        width: min(520px, 96vw);
+        max-height: 92vh;
+        background: #fff;
+        color: #0f172a;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.2);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .75rem 1rem;
+        border-bottom: 1px solid #e6e9ef;
+        background: #f8fafc;
+    }
+
+    .modal-title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .modal-close {
+        border: none;
+        background: transparent;
+        font-size: 1.3rem;
+        line-height: 1;
+        cursor: pointer;
+        color: #334155;
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+    }
+
+        .modal-close:hover {
+            background: #eef2f7;
+        }
+
+    .modal-body {
+        padding: .9rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: .7rem;
+        overflow: auto;
+    }
+
+    .modal-footer {
+        padding: .75rem 1rem;
+        border-top: 1px solid #e6e9ef;
+        display: flex;
+        justify-content: flex-end;
+        gap: .5rem;
+        background: #f8fafc;
+    }
+
+    .btn {
+        padding: .45rem .8rem;
+        border-radius: 6px;
+        border: 1px solid #cfd6e4;
+        background: #ffffff;
+        color: #334155;
+        cursor: pointer;
+        font-size: .9rem;
+    }
+
+    .btn-primary {
+        background: #0d6efd;
+        border-color: #0d6efd;
+        color: #fff;
+    }
+
+    .btn-secondary:hover {
+        background: #eef2f7;
+    }
+
+    .btn:disabled {
+        opacity: .6;
+        cursor: not-allowed;
+    }
+
+    .title-bar {
+        position: relative;
+    }
+
+        .title-bar .page-title {
+            margin-right: 44px; /* deja espacio para el botón */
+        }
+
+    .refresh-btn {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 34px;
+        height: 34px;
+        border-radius: 6px;
+        border: 1px solid #e6e9ef;
+        background: var(--dxbl-background, #fff);
+        color: #0d6efd;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color .15s ease, border-color .15s ease, transform .05s ease;
+    }
+
+        .refresh-btn:hover:not(:disabled) {
+            background: #f0f6ff;
+            border-color: #bcd6ff;
+        }
+
+        .refresh-btn:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        .refresh-btn:disabled {
+            opacity: .6;
+            cursor: default;
+        }
+
+    .refresh-icn {
+        width: 18px;
+        height: 18px;
+        display: block;
+    }
+
+    .refresh-btn.spinning .refresh-icn {
+        animation: spin 1s linear infinite;
+    }
+
     /* Responsivo general */
     @@media (max-width: 640px) {
         .top-header {
@@ -347,7 +766,7 @@
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
         }
 
-            .manual-grid .filters-Identificador{
+            .manual-grid .filters-Identificador {
                 width: 100px;
             }
 
@@ -390,8 +809,8 @@
             gap: .5rem;
             grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
         }
-        
-        .top-header .manual-grid{
+
+        .top-header .manual-grid {
             grid-template-columns: 1fr auto;
             align-items: center;
         }
@@ -410,237 +829,3 @@
         }
     }
 </style>
-
-@code {
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "tipoPantalla")]
-    public string? tipoPantalla { get; set; } = "";
-    private string? _lastTipoPantalla;
-
-    public bool datosCambiados { get; set; } = false;
-
-    List<TipoEgresoItem> ItemsTipoEgreso { get; set; } = new();
-    string PreferredTipoEgreso { get; set; } = string.Empty;
-
-    List<OrigenMovimiento> GridData { get; set; } = new();
-    DxGrid? Grid { get; set; }
-
-    // Texto de búsqueda (filtra en vivo)
-    string searchText { get; set; } = string.Empty;
-
-    // Vista filtrada que se usa para renderizar
-    IReadOnlyList<OrigenMovimiento> FilteredGridData =>
-        string.IsNullOrWhiteSpace(searchText)
-            ? GridData
-            : GridData
-                .Where(it =>
-                    (!string.IsNullOrEmpty(it.IdentificadorOrigenVisible) &&
-                     it.IdentificadorOrigenVisible.Contains(searchText, StringComparison.OrdinalIgnoreCase)) ||
-                    (!string.IsNullOrEmpty(it.IdentificadorOrigen) &&
-                     it.IdentificadorOrigen.Contains(searchText, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-
-    bool isLoading = false;
-    string? loadError;
-
-    CancellationTokenSource? _cts;
-    IDisposable? _navReg;
-
-    bool showPopup = false;
-    string selectedIdentificadorOrigen = default!;
-    string selectedIdentificadorOrigenVisible = default!;
-    string selectedBodega = "000";
-
-    protected override async Task OnInitializedAsync()
-    {
-        _navReg = NavigationManager.RegisterLocationChangingHandler(OnLocationChanging);
-        initParametros();
-
-        if (!AuthService.IsAuthenticated)
-        {
-            NavigationManager.NavigateTo("/login", replace: true);
-            return;
-        }
-
-        await LoadDataAsync();
-    }
-
-    protected override async Task OnParametersSetAsync()
-    {
-        if (string.IsNullOrWhiteSpace(tipoPantalla))
-            tipoPantalla = "OrigenBodega";
-
-        if (_lastTipoPantalla == tipoPantalla)
-            return;
-
-        _lastTipoPantalla = tipoPantalla;
-        initParametros();
-        await LoadDataAsync();
-    }
-
-    string GetTipoName()
-        => ItemsTipoEgreso.FirstOrDefault(p => p.IdValue == PreferredTipoEgreso)?.DisplayText ?? string.Empty;
-
-    public void Dispose()
-    {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _navReg?.Dispose();
-    }
-
-    private void initParametros()
-    {
-        switch (tipoPantalla)
-        {
-            case "OrigenBodega":
-                ItemsTipoEgreso = new()
-                {
-                    new() { DisplayText = "ID Cubicaje", IdValue = "C" },
-                    new() { DisplayText = "ID HojaRuta", IdValue = "H" },
-                    new() { DisplayText = "Compt. Egreso/Factura", IdValue = "E" }
-                };
-                break;
-            case "OrigenSucursal":
-                ItemsTipoEgreso = new()
-                {
-                    new() { DisplayText = "Compt. Egreso/Factura", IdValue = "E" }
-                };
-                break;
-            default:
-                ItemsTipoEgreso = new();
-                break;
-        }
-
-        if (ItemsTipoEgreso.Count > 0)
-            PreferredTipoEgreso = ItemsTipoEgreso[0].IdValue;
-    }
-
-    private async Task OnPreferredTipoEgresoChanged(string newValue)
-    {
-        PreferredTipoEgreso = newValue;
-        // Limpiar el término de búsqueda al cambiar el tipo
-        searchText = string.Empty;
-        await LoadDataAsync();
-    }
-
-    private async Task LoadDataAsync()
-    {
-        loadError = null;
-        isLoading = true;
-        GridData.Clear();
-
-        _cts?.Cancel();
-        _cts = new CancellationTokenSource();
-        var ct = _cts.Token;
-
-        try
-        {
-            if (!AuthService.IsAuthenticated)
-            {
-                loadError = "Sesión no autenticada.";
-                NavigationManager.NavigateTo("/login", replace: true);
-                return;
-            }
-
-            using var client = HttpClientFactory.CreateClient("Api");
-
-            var options = new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            };
-
-            var apiResult = await client.GetFromJsonAsync<Result<List<OrigenMovimiento>>>(
-                $"store/OrigenMovimientoMercaderia/{PreferredTipoEgreso}",
-                options,
-                ct);
-
-            if (apiResult?.data is null)
-            {
-                loadError = "Respuesta sin datos.";
-                return;
-            }
-
-            GridData = apiResult.data;
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        catch (HttpRequestException ex)
-        {
-            loadError = $"Error HTTP: {ex.Message}";
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            loadError = $"Error parseando JSON: {ex.Message}";
-        }
-        catch (Exception ex)
-        {
-            loadError = $"Error inesperado: {ex.Message}";
-        }
-        finally
-        {
-            isLoading = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
-
-    private async Task<bool> AskBeforeLeavingAsync()
-    {
-        if (!datosCambiados) return false;
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "¿Está seguro de que desea abandonar los cambios?");
-        return !confirmed; // true => impedir navegación
-    }
-
-    private async ValueTask OnLocationChanging(LocationChangingContext context)
-    {
-        if (!await AskBeforeLeavingAsync()) return;
-        context.PreventNavigation();
-    }
-
-    private void OnSecuenciaClick(GridRowClickEventArgs args)
-    {
-        if (Grid != null)
-        {
-            var dataItem = Grid.GetDataItem(args.VisibleIndex) as OrigenMovimiento;
-            if (dataItem != null)
-            {
-                selectedIdentificadorOrigen = dataItem.IdentificadorOrigen.ToString();
-                selectedIdentificadorOrigenVisible = dataItem.IdentificadorOrigenVisible;
-            }
-        }
-    }
-
-    void OnAbrirClick(string secuencia)
-    {
-        if (!string.IsNullOrEmpty(secuencia))
-        {
-            var item = GridData.FirstOrDefault(x => x.IdentificadorOrigen == secuencia);
-            if (item != null)
-            {
-                selectedIdentificadorOrigen = secuencia;
-                selectedIdentificadorOrigenVisible = item.IdentificadorOrigenVisible;
-                showPopup = true;
-            }
-            else
-            {
-                selectedIdentificadorOrigen = secuencia;
-                selectedIdentificadorOrigenVisible = secuencia;
-                showPopup = true;
-            }
-        }
-    }
-
-    private async void AbrirSecuencia(string secuencia)
-    {
-        var guid = Guid.NewGuid().ToString();
-        await SessionStorage.SetItemAsync($"{guid}-TipoEgreso", PreferredTipoEgreso);
-        await SessionStorage.SetItemAsync($"{guid}-SelectedSecuencia", selectedIdentificadorOrigen);
-        NavigationManager.NavigateTo($"/Bodega/EgresoComprobanteDetalle/{guid}", true, true);
-    }
-
-    public class TipoEgresoItem
-    {
-        public string DisplayText { get; set; } = string.Empty;
-        public string IdValue { get; set; } = string.Empty;
-    }
-}
