@@ -3,10 +3,11 @@
 @using com.laganga.app.Shared.Services
 @inject IAuthenticationService AuthService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <div class="login-page-root">
     <div class="login-header">
-        <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuByrTM7O9ssZ_ftQpVPZm2RXVAEfrh5I8_Cmj7sW8WWfkuwrdr94etFt-aszpXJaYtfEJmB0Y-K6Zlm3695lp5vY6Vi5g4LQfECi0waxgdfMW4YJW6cz66c8lys75lll0mwG1EiCOFXZfkDaI3TIt9PtvN3eC_0t3th4dlQA6PIgHlYnv-FO9BVZsyPNkjNL2Zmdx4sDmCNexnhqdMrV7nJCLJualZTeQ1_14o1LuPZWuSJs4SpvNve0WaVaFG3_zqGjVMmZ4jXCkA"
+        <img src="_content/com.laganga.app.Shared/logoLogin.svg"
              alt="Logo" class="login-logo">
     </div>
 
@@ -51,8 +52,30 @@
                                           clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <InputText id="password" type="password" class="form-control custom-input"
+                            <InputText id="password" type="@PasswordInputType" class="form-control custom-input"
                                        @bind-Value="Password" placeholder="Tu contraseña" />
+                            <button type="button"
+                                    class="custom-input-action"
+                                    data-visible="@passwordVisible.ToString().ToLowerInvariant()"
+                                    aria-pressed="@passwordVisible"
+                                    aria-label="@(passwordVisible ? "Ocultar contraseña" : "Mostrar contraseña")"
+                                    title="@(passwordVisible ? "Ocultar contraseña" : "Mostrar contraseña")"
+                                    @onclick="TogglePasswordVisibility"
+                                    @onmousedown:preventDefault
+                                    @onmousedown:stopPropagation>
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                     viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="icon-eye">
+                                    <!-- Contorno del ojo -->
+                                    <path d="M2 12c2.5-4 6.5-7 10-7s7.5 3 10 7c-2.5 4-6.5 7-10 7s-7.5-3-10-7z"
+                                          fill="none" stroke="currentColor" stroke-width="2"
+                                          stroke-linecap="round" stroke-linejoin="round" />
+                                    <!-- Pupila -->
+                                    <circle cx="12" cy="12" r="3" fill="currentColor" />
+                                    <!-- Línea de tachado (visible cuando mostrar contraseña está activo) -->
+                                    <path class="slash" d="M4 4L20 20"
+                                          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
 
@@ -95,6 +118,26 @@
     private string? error;
     private bool isLoading;
 
+    // Mostrar/ocultar contraseña
+    private bool passwordVisible;
+    private string PasswordInputType => passwordVisible ? "text" : "password";
+    private void TogglePasswordVisibility() => passwordVisible = !passwordVisible;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+
+        try
+        {
+            await JS.InvokeVoidAsync("lagangaLoginKeyboard.initSafe");
+        }
+        catch
+        {
+            // ignorar
+        }
+    }
+
     private async Task HandleLogin()
     {
         error = null;
@@ -110,6 +153,14 @@
         catch (NetworkUnavailableException nex)
         {
             error = nex.Message;
+        }
+        catch (HttpRequestException)
+        {
+            error = "Error de conexión. Verifica tu red e intenta de nuevo.";
+        }
+        catch (Exception ex) when (ex.Message.Contains("Binder") || ex.Message.Contains("DeadObject"))
+        {
+            error = "Error del sistema. Por favor, reinicia la aplicación.";
         }
         catch (Exception ex)
         {
@@ -128,14 +179,18 @@
         --color-secondary: #5bd0ef;
         --bg-light: #ffffff;
         --bg-dark: #0d1117;
+        --keyboard-padding: 0px;
     }
 
     .login-page-root {
         background-color: var(--bg-light);
         min-height: 100dvh;
+        min-height: 100svh;
         display: flex;
         flex-direction: column;
         font-family: system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+        scroll-behavior: smooth;
+        overflow: hidden;
     }
 
     .login-header {
@@ -160,12 +215,17 @@
         border-top-right-radius: 1.5rem;
         margin-top: -2rem;
         padding: 2rem;
-        flex-grow: 2;
+        flex-grow: 5;
         position: relative;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        min-height: 50vh;
+        padding-bottom: calc(2rem + var(--keyboard-padding) + env(safe-area-inset-bottom, 0px));
     }
 
     .login-form-wrapper {
         max-width: 100%;
+        scroll-margin-bottom: 30vh;
     }
 
     .custom-input-wrapper {
@@ -186,6 +246,7 @@
 
     .form-control.custom-input {
         padding-left: 2.5rem;
+        padding-right: 2.5rem; /* espacio para el botón ojo */
         padding-top: 0.75rem;
         padding-bottom: 0.75rem;
         border-radius: 0.5rem;
@@ -196,6 +257,48 @@
         .form-control.custom-input:focus {
             border-color: var(--color-secondary);
             box-shadow: 0 0 0 0.25rem rgba(91,208,239,0.25);
+        }
+
+    .custom-input-action {
+        position: absolute;
+        top: 50%;
+        right: 0.5rem;
+        transform: translateY(-50%);
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background: transparent;
+        color: #9ca3af;
+        border-radius: 6px;
+        padding: 0;
+        cursor: pointer;
+        transition: color .15s ease, background-color .15s ease;
+    }
+
+        .custom-input-action:hover {
+            color: #6b7280;
+            background-color: rgba(0,0,0,0.04);
+        }
+
+        .custom-input-action:focus-visible {
+            outline: 2px solid rgba(91,208,239,0.5);
+            outline-offset: 2px;
+        }
+
+        .custom-input-action .slash {
+            opacity: 0;
+            stroke-dasharray: 32;
+            stroke-dashoffset: 32;
+            transition: opacity .2s ease, stroke-dashoffset .25s ease;
+        }
+
+        /* Mostrar la línea tachada cuando passwordVisible = true (mostrar contraseña activo) */
+        .custom-input-action[data-visible="true"] .slash {
+            opacity: 1;
+            stroke-dashoffset: 0;
         }
 
     .btn-custom-primary {
@@ -235,6 +338,10 @@
         color: #6b7280;
     }
 
+    .keyboard-open .login-body {
+        padding-bottom: calc(4rem + var(--keyboard-padding) + env(safe-area-inset-bottom, 0px));
+    }
+
     @@media (prefers-color-scheme: dark) {
         .login-page-root,
         .login-body {
@@ -248,6 +355,10 @@
             color: white;
         }
 
+        .custom-input-action:hover {
+            background-color: rgba(255,255,255,0.06);
+        }
+
         h1 {
             color: white !important;
         }
@@ -259,11 +370,11 @@
 
     @@media (max-width: 520px) {
         .login-header {
-            padding: 2rem 1rem 3rem;
+            padding: 0.5rem 1rem 0.5rem;
         }
 
         .login-logo {
-            width: 8rem;
+            width: 12rem;
             margin-bottom: 0.5rem;
         }
 
@@ -351,3 +462,37 @@
         }
     }
 </style>
+
+<script>
+    window.lagangaLoginKeyboard = {
+        initSafe: function () {
+            try {
+                const isAndroid = /Android/i.test(navigator.userAgent);
+                if (isAndroid) return; 
+
+                const root = document.querySelector('.login-page-root');
+                if (!root || !window.visualViewport) return;
+
+                let resizeTimeout;
+
+                const updateKeyboardState = () => {
+                    clearTimeout(resizeTimeout);
+                    resizeTimeout = setTimeout(() => {
+                        const vh = window.visualViewport.height;
+                        const full = window.innerHeight;
+                        const diff = Math.max(0, full - vh);
+                        root.style.setProperty('--keyboard-padding', diff + 'px');
+                        root.classList.toggle('keyboard-open', diff > 80);
+                    }, 80);
+                };
+
+                window.visualViewport.addEventListener('resize', updateKeyboardState);
+
+                updateKeyboardState();
+            }
+            catch {
+                // ignorar
+            }
+        }
+    };
+</script>

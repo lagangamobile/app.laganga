@@ -5,8 +5,10 @@ namespace com.laganga.app.Shared.Services;
 public class LayoutService
 {
     public event Action? DrawerStateChanged;
-
     private bool _isDrawerOpen;
+    
+    public string Title { get; set; } = "";
+    
     public bool IsDrawerOpen
     {
         get => _isDrawerOpen;

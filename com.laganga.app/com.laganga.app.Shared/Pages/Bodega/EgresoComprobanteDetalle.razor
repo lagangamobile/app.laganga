@@ -80,8 +80,18 @@ else
         </div>
 
         <div class="comprobantes-wrapper">
+            <div class="filters-row">
+                <DxTextBox LabelText="Buscar"
+                           @bind-Text="searchCompteText"
+                           BindValueMode="BindValueMode.OnInput"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                           NullText="Buscar por #, bodega o destinatario"
+                           SizeMode="SizeMode.Small"
+                           aria-label="Buscar comprobante"
+                           CssClass="manual-input" />
+            </div>
             <div class="comprobantes-strip" role="tablist" aria-label="Comprobantes">
-                @foreach (var key in groupKeys)
+                @foreach (var key in FilteredGroupKeys)
                 {
                     var comp = groupedComprobantes[key].First();
                     var (cap, exp) = GetCompProgress(key);
@@ -248,7 +258,7 @@ else
                 }
             </div>
             <div class="modal-footer">
-                <button class="btn btn-secondary" type="button" disabled="@isPosting" @onclick="() => showFinalizeConfirm = false">Cancelar</button>
+                <button class="btn btn-secondary" type="button" disabled="@isPosting" @onclick="CancelModalAsync">Cancelar</button>
                 <button class="btn btn-primary" type="button" disabled="@( !CanFinalize() || isPosting )" @onclick="FinalizarAsync">Enviar</button>
             </div>
         </div>
@@ -258,6 +268,8 @@ else
 
 @code {
     [Parameter] public string guid { get; set; } = string.Empty;
+
+    private string DataOrigen { get { return "tipo_origen"; }}
 
     private string tipoEgreso { get; set; } = string.Empty;
     private string IdentificadorOrigen { get; set; } = string.Empty;
@@ -317,6 +329,21 @@ else
     private bool isPosting = false;
     private string? postError;
 
+    // Filtro de comprobantes
+    private string searchCompteText { get; set; } = string.Empty;
+
+    private IReadOnlyList<string> FilteredGroupKeys =>
+        string.IsNullOrWhiteSpace(searchCompteText)
+            ? groupKeys
+            : groupKeys.Where(k =>
+            {
+                var comp = groupedComprobantes.TryGetValue(k, out var list) ? list.FirstOrDefault() : null;
+                if (comp == null) return false;
+                var s = searchCompteText;
+                return (!string.IsNullOrEmpty(comp.NumCompte) && comp.NumCompte.Contains(s, StringComparison.OrdinalIgnoreCase)) ||
+                       (!string.IsNullOrEmpty(comp.Bodega) && comp.Bodega.Contains(s, StringComparison.OrdinalIgnoreCase)) ||
+                       (!string.IsNullOrEmpty(comp.Destinatario) && comp.Destinatario.Contains(s, StringComparison.OrdinalIgnoreCase));
+            }).ToList();
     private int TotalProductosIngresados =>
         groupedComprobantes.Values.SelectMany(c => c).SelectMany(c => c.Detalles).Sum(d => d.CantidadIngresada);
 
@@ -325,7 +352,6 @@ else
 
     private double ProgressPercent => TotalProductos == 0 ? 0 : (double)TotalProductosIngresados / TotalProductos * 100d;
 
-    private System.Timers.Timer? escaneoTimer;
 
     protected override async Task OnInitializedAsync()
     {
@@ -352,8 +378,7 @@ else
     {
         if (!AuthService.IsAuthenticated)
         {
-            // Protección ante token source ya desechado por Dispose o carrera.
-            try { _cts?.Cancel(); } catch (ObjectDisposedException) { /* ignore */ }
+            try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
             isLoading = false;
             loadError = "Sesión expirada.";
             InvokeAsync(StateHasChanged);
@@ -370,17 +395,16 @@ else
             if (!AuthService.IsAuthenticated)
             {
                 loadError = "Sesión no autenticada.";
-                Nav.NavigateTo("/login", replace: true);
+                Nav.NavigateTo("/loginU", replace: true);
                 return;
             }
 
-            // Crear nueva CTS y desechar la previa
             _cts?.Cancel();
             _cts?.Dispose();
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
 
-            var urlrequest = $"store/OrigenMovimientoMercaderiaDetalle/{tipoEgreso}/{IdentificadorOrigen}/{guid}";
+            var urlrequest = $"v1/bodega/OrigenMovimientoMercaderiaDetalle/{DataOrigen}/{tipoEgreso}/{IdentificadorOrigen}/{guid}";
             var response = await apiClient.GetAsync<OrigenMovimiento>(urlrequest, ct);
 
             if ((response?.succeeded ?? false) == false)
@@ -424,6 +448,8 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        //DESACTIVADO POR PRUEBAS -- REACTIVAR SI ES NECESAIRO
+
         if (firstRender)
         {
             try
@@ -452,6 +478,8 @@ else
 
     private async Task<bool> AskBeforeLeavingAsync()
     {
+        //desactivado temporalmente
+        datosCambiados = false;
         if (!datosCambiados) return false;
         var confirmed = await JS.InvokeAsync<bool>("confirm", "¿Está seguro de que desea abandonar los cambios?");
         return !confirmed;
@@ -473,7 +501,6 @@ else
 
     public void Dispose()
     {
-        // Desuscribir siempre antes de liberar recursos
         AuthService.AuthenticationStateChanged -= OnAuthChanged;
 
         try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
@@ -486,7 +513,6 @@ else
 
     private void OnDetalleRowClick(GridRowClickEventArgs args)
     {
-        // Desactivado por ahora
     }
 
     async Task SeleccionarCompte(string compte)
@@ -584,7 +610,7 @@ else
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
 
-            var urlrequest = $"store/RegistrarSerieMovimiento{(!string.IsNullOrEmpty(accion) ? $"?accion={accion}" : "")}";
+            var urlrequest = $"v1/bodega/RegistrarSerieMovimiento{(!string.IsNullOrEmpty(accion) ? $"?accion={accion}" : "")}";
             var response = await apiClient.PostAsync<object>(urlrequest, serieMovimiento, ct);
             return (response?.succeeded ?? false, response?.message ?? "Error inesperado al registrar serie.");
         }
@@ -643,11 +669,11 @@ else
         selectedDetalle.SeriesCapturadas.Add(serieIngresada.Trim());
         datosCambiados = true;
 
-        if (IsComprobanteComplete(selectedCompte))
-        {
-            await CheckAndAdvanceComprobanteIfCompleteAsync();
-            return;
-        }
+        // if (IsComprobanteComplete(selectedCompte))
+        // {
+        //     await CheckAndAdvanceComprobanteIfCompleteAsync();
+        //     return;
+        // }
 
         if (IsDetalleComplete(selectedDetalle))
         {
@@ -706,8 +732,16 @@ else
 
     private bool CanFinalize() => item != null && TotalProductosIngresados > 0;
 
+    private async Task CancelModalAsync()
+    {
+        datosCambiados = true;
+        showFinalizeConfirm = false;
+        await Task.CompletedTask;
+    }
+
     private async Task FinalizarAsync()
     {
+        datosCambiados = false;
         await SessionStorage.SetItemAsync($"{guid}-OrigenMovimientoDespacho", item);
         Nav.NavigateTo($"/Bodega/EgresoComprobanteResumen/{guid}");
     }
@@ -859,7 +893,6 @@ else
         } catch { }
     };
 
-    // NUEVO: desplazamiento horizontal para el comprobante seleccionado
     window.scrollCompteIntoView = function (key) {
         try {
             const strip = document.querySelector('.comprobantes-strip');
@@ -878,17 +911,28 @@ else
         } catch { }
     };
 
-    document.addEventListener("DOMContentLoaded", function() {
-      const input_txtCodigoCaptura = document.getElementsByName('txtCodigoCaptura')[0];
-        input_txtCodigoCaptura?.addEventListener('focus', () => {
-          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        });
 
-        const input_txtSerieCaptura = document.getElementsByName('txtSerieCaptura')[0];
-        input_txtSerieCaptura?.addEventListener('focus', () => {
-          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        });
+    document.addEventListener("DOMContentLoaded", function() {
+        const scrollContainer = document.querySelector('.detalle-scroll');
+        const codigoHost = document.getElementById('txtCodigoCaptura');
+        const serieHost = document.getElementById('txtSerieCaptura');
+
+        const ensureVisible = (host) => {
+          if (!host || !scrollContainer) return;
+          const rect = host.getBoundingClientRect();
+          const parentRect = scrollContainer.getBoundingClientRect();
+          if (rect.bottom > parentRect.bottom || rect.top < parentRect.top) {
+            scrollContainer.scrollTo({
+              top: scrollContainer.scrollTop + (rect.top - parentRect.top) - 40,
+              behavior: 'smooth'
+            });
+          }
+        };
+
+        codigoHost?.addEventListener('focusin', () => ensureVisible(codigoHost));
+        serieHost?.addEventListener('focusin', () => ensureVisible(serieHost));
     });
+
 
 </script>
 
@@ -896,7 +940,6 @@ else
 <style>
 
 
-    /* Layout base */
     .detalle-root {
         display: flex;
         flex-direction: column;
@@ -904,14 +947,12 @@ else
         padding-bottom: 1rem;
     }
 
-    /* Sentinel (no visible) */
     .sticky-sentinel {
         position: relative;
         width: 100%;
-        height: 1px; /* disparador del observer */
+        height: 1px;
     }
 
-    /* Estado */
     .status-block {
         padding: .75rem 1rem;
         border-radius: 6px;
@@ -946,9 +987,8 @@ else
             color: #8a6d00;
         }
 
-    /* Encabezado */
     .top-header {
-        position: sticky;
+        /* position: sticky; DESACTIVACION TEMPORAL  */
         top: 0;
         z-index: 10;
         background: var(--dxbl-background, #fff);
@@ -1021,15 +1061,28 @@ else
         flex-wrap: wrap;
     }
 
-    /* Comprobantes horizontales */
     .comprobantes-wrapper {
         position: sticky;
-        top: var(--hdr-h, 75px);
+        /* top: calc(var(--hdr-h, 75px)); */
+        top: -1.25rem;
         z-index: 9;
         overflow: hidden;
         background: var(--dxbl-background, #fff);
         border-radius: 10px;
         box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+        /* Filtro inline similar a filters-row del listado */
+        .comprobantes-wrapper .filters-row {
+            display: flex;
+            gap: .6rem;
+            align-items: center;
+            flex-wrap: wrap;
+            padding: .5rem .5rem 0 .5rem;
+        }
+
+    .manual-input {
+        min-width: 0;
     }
 
     .comprobantes-strip {
@@ -1131,28 +1184,6 @@ else
         border-radius: 10px;
     }
 
-    /* Banner seleccionado */
-    .selected-comp-banner {
-        background: #f1f5fb;
-        border-left: 4px solid #0d6efd;
-        padding: .45rem .6rem;
-        border-radius: 6px;
-        font-size: .9rem;
-        display: flex;
-        gap: .5rem;
-        align-items: center;
-    }
-
-        .selected-comp-banner .label {
-            color: #49658c;
-            font-weight: 600;
-        }
-
-        .selected-comp-banner .value {
-            color: #182b4d;
-        }
-
-    /* Panel de captura */
     .capture-panel {
         background: var(--dxbl-background, #fff);
         border-radius: 12px;
@@ -1183,7 +1214,6 @@ else
         flex-wrap: wrap;
     }
 
-    /* Series */
     .series-wrapper {
         display: flex;
         flex-direction: column;
@@ -1274,13 +1304,12 @@ else
         font-weight: 600;
     }
 
-    /* NUEVO: title bar con botón de actualizar */
     .title-bar {
         position: relative;
     }
 
         .title-bar .page-title {
-            margin-right: 44px; /* deja espacio para el botón */
+            margin-right: 44px;
         }
 
     .refresh-btn {
@@ -1334,12 +1363,10 @@ else
         }
     }
 
-    /* Grid ajustes */
     .detalles-grid .dxbl-grid-table {
         font-size: .72rem;
     }
 
-    /* NUEVO: Campo compacto para Artículo (chip) */
     .field-compact {
         display: flex;
         flex-direction: column;
@@ -1360,7 +1387,6 @@ else
         text-overflow: ellipsis;
     }
 
-    /* NUEVO: Estado válido para el editor de Código */
     #txtCodigoCaptura.valid,
     #txtCodigoCaptura.valid .dxbl-input,
     #txtCodigoCaptura.valid input {
@@ -1378,7 +1404,6 @@ else
             border-color: #198754 !important;
         }
 
-    /* Modal simple y responsive (igual que Resumen) */
     .modal-backdrop {
         position: fixed;
         inset: 0;
@@ -1483,7 +1508,6 @@ else
         cursor: not-allowed;
     }
 
-    /* Responsivo general */
     @@media (max-width: 640px) {
         .top-header {
             padding: .5rem .6rem .7rem;
@@ -1511,7 +1535,6 @@ else
         }
     }
 
-    /* Handheld (480x692 aprox): evitar que el chip tape 'Bod', y optimizar layout */
     @@media (max-width: 520px) {
         .comp-bod {
             flex: 1 1 100%;
@@ -1549,15 +1572,11 @@ else
             }
     }
 
-    /* Handheld (480x692 aprox): fuerza modo compacto del header y ajuste de listas */
     @@media (max-width: 520px) and (max-height: 740px) {
         .top-header {
             padding: .35rem .5rem .5rem;
             gap: .45rem;
         }
-            /*.top-header .id-box {
-                            display: none;
-                        }*/
 
             .top-header .progress-box {
                 flex-direction: row;
@@ -1590,7 +1609,6 @@ else
         }
     }
 
-    /* Acordeón para el grid de detalles */
     .accordion-panel {
         background: var(--dxbl-background, #fff);
         border-radius: 10px;

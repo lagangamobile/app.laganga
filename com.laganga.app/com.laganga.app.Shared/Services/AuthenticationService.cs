@@ -40,29 +40,30 @@ public class AuthenticationService : IAuthenticationService
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(AccessToken) && CurrentUser.Identity?.IsAuthenticated == true;
     public ClaimsPrincipal CurrentUser { get; private set; } = new(new ClaimsIdentity());
     public string? AccessToken { get; private set; }
-    public string? IdToken { get; private set; } // Normalmente no provisto en password grant
+    public string? IdToken { get; private set; }
     public string? RefreshToken { get; private set; }
     public DateTimeOffset AccessTokenExpiration { get; private set; } = DateTimeOffset.MinValue;
 
-    // Últimas credenciales (solo memoria; NO persistir password)
     private string? _lastUser;
     private string? _lastPassword;
 
-    // SecureStorage keys
     private const string AccessTokenKey = "auth.access_token";
     private const string RefreshTokenKey = "auth.refresh_token";
     private const string IdTokenKey = "auth.id_token";
     private const string ExpirationKey = "auth.access_token_exp";
-    private const string UserNameKey = "auth.username"; // Opcional (no password)
+    private const string UserNameKey = "auth.username";
 
-    private static readonly TimeSpan RefreshSkew = TimeSpan.FromSeconds(60);
+    // Aumentado a 5 minutos para dar más margen al refresco
+    private static readonly TimeSpan RefreshSkew = TimeSpan.FromMinutes(5);
+
+    // Flag para evitar refrescos concurrentes
+    private bool _isRefreshing;
 
     public AuthenticationService(IApiGangaOauth apiGangaOauth)
     {
         _apiGangaOauth = apiGangaOauth;
         _ = TryRestoreSessionAsync();
     }
-
 
     public async Task LoginAsync(string user, string password)
     {
@@ -84,9 +85,13 @@ public class AuthenticationService : IAuthenticationService
             });
 
             if (tokenResponse.IsError)
-                throw new Exception($"Login failed: {tokenResponse.Error}");
+                throw new Exception($"Login failed: {tokenResponse.Json?.GetProperty("detail").GetString()}");
+
+            
+
 
             MapTokenResponse(tokenResponse);
+            System.Diagnostics.Debug.WriteLine($"[AuthService] Iniciando token. Expiración actual: {AccessTokenExpiration:O}");
             await BuildClaimsPrincipalAsync();
             await PersistTokensAsync(user);
 
@@ -113,10 +118,10 @@ public class AuthenticationService : IAuthenticationService
         AccessTokenExpiration = DateTimeOffset.MinValue;
         CurrentUser = new ClaimsPrincipal(new ClaimsIdentity());
         _lastPassword = null;
+        _isRefreshing = false;
 
         await ClearPersistedAsync();
         NotifyAuthenticationStateChanged();
-        await Task.CompletedTask;
     }
 
     public async Task<string?> GetValidAccessTokenAsync()
@@ -127,11 +132,16 @@ public class AuthenticationService : IAuthenticationService
             if (string.IsNullOrEmpty(AccessToken))
                 return null;
 
-            if (NeedsRefresh())
+            var now = DateTimeOffset.UtcNow;
+
+            // Si el token ya expiró completamente
+            if (now >= AccessTokenExpiration)
             {
-                if (string.IsNullOrEmpty(RefreshToken))
+                // Intentar refrescar si hay refresh token
+                if (!string.IsNullOrEmpty(RefreshToken))
                 {
-                    if (DateTimeOffset.UtcNow >= AccessTokenExpiration)
+                    var refreshed = await RefreshAccessTokenAsync();
+                    if (!refreshed)
                     {
                         await LogoutAsync();
                         return null;
@@ -139,42 +149,18 @@ public class AuthenticationService : IAuthenticationService
                     return AccessToken;
                 }
 
-                try
-                {
-                    await EnsureDiscoveryAsync();
-                    var refreshResponse = await _apiGangaOauth.getClient().RequestRefreshTokenAsync(new RefreshTokenRequest
-                    {
-                        Address = _discovery!.TokenEndpoint,
-                        ClientId = "71cf1cb3-1803-49d3-b26b-d81baa6296be",
-                        ClientSecret = "N2NmYzJlZTAtY2E3Mi00Y2I4LTg3YjItY2E0Y2EwMDAwMDAw",
-                        RefreshToken = RefreshToken
-                    });
-
-                    if (refreshResponse.IsError)
-                    {
-                        // Revocado / inválido
-                        await LogoutAsync();
-                        return null;
-                    }
-
-                    MapTokenResponse(refreshResponse);
-                    await PersistTokensAsync(_lastUser);
-                    StartExpirationWatcher();
-                }
-                catch (HttpRequestException)
-                {
-                    // Sin red: permitir uso si no expiró totalmente
-                    if (DateTimeOffset.UtcNow >= AccessTokenExpiration)
-                    {
-                        await LogoutAsync();
-                        return null;
-                    }
-                }
-            }
-            else if (DateTimeOffset.UtcNow >= AccessTokenExpiration)
-            {
                 await LogoutAsync();
                 return null;
+            }
+
+            // Si el token necesita refresco (está próximo a expirar)
+            if (NeedsRefresh())
+            {
+                if (!string.IsNullOrEmpty(RefreshToken))
+                {
+                    // Intentar refrescar, pero si falla, el token actual aún es válido
+                    await RefreshAccessTokenAsync();
+                }
             }
 
             return AccessToken;
@@ -185,11 +171,86 @@ public class AuthenticationService : IAuthenticationService
         }
     }
 
+    /// <summary>
+    /// Método dedicado para refrescar el access token usando el refresh token.
+    /// </summary>
+    /// <returns>True si el refresco fue exitoso, false en caso contrario.</returns>
+    private async Task<bool> RefreshAccessTokenAsync()
+    {
+        if (_isRefreshing)
+            return false;
+
+        if (string.IsNullOrEmpty(RefreshToken))
+            return false;
+
+        _isRefreshing = true;
+
+        try
+        {
+            System.Diagnostics.Debug.WriteLine($"[AuthService] Iniciando refresco de token. Expiración actual: {AccessTokenExpiration:O}");
+
+            await EnsureDiscoveryAsync();
+
+            var refreshResponse = await _apiGangaOauth.getClient().RequestRefreshTokenAsync(new RefreshTokenRequest
+            {
+                Address = _discovery!.TokenEndpoint,
+                ClientId = "71cf1cb3-1803-49d3-b26b-d81baa6296be",
+                ClientSecret = "N2NmYzJlZTAtY2E3Mi00Y2I4LTg3YjItY2E0Y2EwMDAwMDAw",
+                RefreshToken = RefreshToken
+            });
+
+            if (refreshResponse.IsError)
+            {
+                System.Diagnostics.Debug.WriteLine($"[AuthService] Error al refrescar token: {refreshResponse.Error} - {refreshResponse.ErrorDescription}");
+                return false;
+            }
+
+            MapTokenResponse(refreshResponse);
+            await PersistTokensAsync(_lastUser);
+
+            System.Diagnostics.Debug.WriteLine($"[AuthService] Token refrescado exitosamente. Nueva expiración: {AccessTokenExpiration:O}");
+
+            // Reiniciar el watcher con la nueva expiración
+            StartExpirationWatcher();
+
+            return true;
+        }
+        catch (HttpRequestException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AuthService] Error de red al refrescar: {ex.Message}");
+            // Sin red: no marcar como fallido si el token actual aún es válido
+            return DateTimeOffset.UtcNow < AccessTokenExpiration;
+        }
+        catch (TaskCanceledException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AuthService] Timeout al refrescar: {ex.Message}");
+            return DateTimeOffset.UtcNow < AccessTokenExpiration;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AuthService] Excepción inesperada al refrescar: {ex}");
+            return false;
+        }
+        finally
+        {
+            _isRefreshing = false;
+        }
+    }
+
     private bool NeedsRefresh()
     {
         if (string.IsNullOrEmpty(AccessToken)) return false;
         if (AccessTokenExpiration == DateTimeOffset.MinValue) return true;
-        return DateTimeOffset.UtcNow >= AccessTokenExpiration - RefreshSkew;
+
+        var refreshThreshold = AccessTokenExpiration - RefreshSkew;
+        var needsRefresh = DateTimeOffset.UtcNow >= refreshThreshold;
+
+        if (needsRefresh)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AuthService] Token necesita refresco. Ahora: {DateTimeOffset.UtcNow:O}, Umbral: {refreshThreshold:O}, Expiración: {AccessTokenExpiration:O}");
+        }
+
+        return needsRefresh;
     }
 
     private async Task EnsureDiscoveryAsync()
@@ -205,19 +266,17 @@ public class AuthenticationService : IAuthenticationService
         AccessToken = response.AccessToken;
         RefreshToken = response.RefreshToken ?? RefreshToken;
         IdToken = response.IdentityToken ?? IdToken;
-        // ExpiresIn (segundos)
+
         if (response.ExpiresIn > 0)
             AccessTokenExpiration = DateTimeOffset.UtcNow.AddSeconds(response.ExpiresIn);
         else
-            AccessTokenExpiration = DateTimeOffset.UtcNow.AddMinutes(5); // fallback defensivo
-
+            AccessTokenExpiration = DateTimeOffset.UtcNow.AddMinutes(5);
     }
 
     private async Task BuildClaimsPrincipalAsync()
     {
         var claims = new List<Claim>();
 
-        // UserInfo si existe endpoint y scope openid/profile
         if (_discovery?.UserInfoEndpoint != null && !string.IsNullOrEmpty(AccessToken))
         {
             try
@@ -239,7 +298,6 @@ public class AuthenticationService : IAuthenticationService
             }
         }
 
-        // Claims mínimos
         if (!string.IsNullOrEmpty(_lastUser))
             claims.Add(new Claim(ClaimTypes.Name, _lastUser));
 
@@ -266,7 +324,6 @@ public class AuthenticationService : IAuthenticationService
             if (long.TryParse(expString, out var ticks))
                 AccessTokenExpiration = new DateTimeOffset(ticks, TimeSpan.Zero);
 
-            // Reclama identidad mínima
             var claims = new List<Claim>
             {
                 new("restored","true")
@@ -275,6 +332,8 @@ public class AuthenticationService : IAuthenticationService
                 claims.Add(new(ClaimTypes.Name, _lastUser));
 
             CurrentUser = new ClaimsPrincipal(new ClaimsIdentity(claims, "restored"));
+
+            System.Diagnostics.Debug.WriteLine($"[AuthService] Sesión restaurada. Expiración: {AccessTokenExpiration:O}, RefreshToken presente: {!string.IsNullOrEmpty(RefreshToken)}");
 
             StartExpirationWatcher();
             NotifyAuthenticationStateChanged();
@@ -335,27 +394,36 @@ public class AuthenticationService : IAuthenticationService
                 while (!ct.IsCancellationRequested && !string.IsNullOrEmpty(AccessToken))
                 {
                     var now = DateTimeOffset.UtcNow;
-                    var nextCheck = AccessTokenExpiration - RefreshSkew;
-                    if (nextCheck < now) nextCheck = now;
+                    var refreshTime = AccessTokenExpiration - RefreshSkew;
 
-                    var delay = nextCheck - now;
+                    // Calcular cuánto esperar antes del próximo intento de refresco
+                    var delay = refreshTime - now;
+
                     if (delay > TimeSpan.Zero)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[ExpirationWatcher] Esperando {delay.TotalMinutes:F1} minutos hasta el próximo refresco");
                         await Task.Delay(delay, ct);
+                    }
 
                     if (ct.IsCancellationRequested) break;
 
+                    // Intentar obtener un token válido (esto refrescará si es necesario)
                     var token = await GetValidAccessTokenAsync();
-                    if (string.IsNullOrEmpty(token) || !IsAuthenticated)
-                        break;
 
-                    if (DateTimeOffset.UtcNow >= AccessTokenExpiration)
+                    if (string.IsNullOrEmpty(token))
                     {
-                        await LogoutAsync();
+                        System.Diagnostics.Debug.WriteLine("[ExpirationWatcher] No se pudo obtener token válido, terminando watcher");
                         break;
                     }
+
+                    // Pequeña pausa para evitar loops muy rápidos
+                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
                 }
             }
-            catch (TaskCanceledException) { }
+            catch (TaskCanceledException)
+            {
+                System.Diagnostics.Debug.WriteLine("[ExpirationWatcher] Watcher cancelado");
+            }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"[ExpirationWatcher] Error: {ex}");

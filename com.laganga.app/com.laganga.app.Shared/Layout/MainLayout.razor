@@ -3,7 +3,7 @@
 @using DevExpress.Blazor.Internal;
 @inject com.laganga.app.Shared.Services.LayoutService LayoutService
 
-<div class="card no-border layout-root overflow-hidden">
+<div class="card no-border layout-root">
     <div class="card-header no-border p-2 bg-ganga">
         <DxToolbar>
             <Items>
@@ -20,7 +20,7 @@
         </DxToolbar>
     </div>
 
-    <div class="card-body p-0 overflow-hidden">
+    <div class="card-body p-0 bg-ganga">
         <DxDrawer @bind-IsOpen="LayoutService.IsDrawerOpen"
                   Mode="DrawerMode.Overlap"
                   Position="DrawerPosition.Right"
@@ -35,7 +35,7 @@
             <TargetContent>
                 <div class="page page-content-wrapper">
                     <main class="main-wrapper">
-                        <article class="content px-4">
+                        <article class="content px-4 scroll-content page-custom-radius-bg">
                             <com.laganga.app.Shared.Pages.ConnectivityBanner />
                             @Body
                         </article>
@@ -54,6 +54,9 @@
 </div>
 
 @code {
+    [Parameter]
+    public string Title { get; set; }
+
     protected override void OnInitialized()
     {
         LayoutService.DrawerStateChanged += OnDrawerStateChanged;
@@ -82,19 +85,27 @@
 }
 
 <style>
-    .bg-ganga{
+    .bg-ganga {
         background: #000064;
     }
+
+    .page-custom-radius-bg {
+        border-radius: 15px 15px 0px 0px;
+        background: #fff;
+    }
+
     .layout-root {
         height: 100vh;
         display: flex;
         flex-direction: column;
+        /* Se eliminó overflow-hidden para permitir scroll interno */
     }
 
         .layout-root > .card-body {
             flex: 1;
             display: flex;
-            overflow: hidden;
+            /* Quitar overflow:hidden y permitir que el hijo maneje el scroll */
+            min-height: 0; /* Necesario para que el contenido flex pueda hacer scroll */
         }
 
     .full-height-drawer,
@@ -103,12 +114,47 @@
     .full-height-drawer .dxbl-drawer-panel {
         height: 100%;
         max-height: 100%;
+        min-height: 0;
+    }
+
+    .dxbl-drawer-target-content {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
     }
 
     .page-content-wrapper,
-    .main-wrapper,
-    .dxbl-drawer-target-content {
+    .main-wrapper {
         height: 100%;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .main-wrapper {
+        flex: 1;
+        min-height: 0;
+    }
+
+    /* Área que realmente scrolla */
+    .scroll-content {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
+    }
+
+    /* Opcional: limitar máximo ancho en dispositivos handheld si se desea */
+    @@media (max-width: 600px) {
+        .scroll-content
+
+    {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
     }
 
     .dxbl-drawer-content:has(.demo-drawer-overview-right) {
@@ -147,6 +193,8 @@
         gap: 4px;
         width: 24px;
         margin-left: auto;
+        margin-top: .3rem;
+        margin-bottom: .3rem;
     }
 
         .header__burger i {
@@ -175,18 +223,17 @@
         box-shadow: none;
     }
 
-    /* Versión accesible opcional: solo quitar en clic de ratón
-           y dejar un foco visible para teclado */
     .dxbl-toolbar .dxbl-btn:focus-visible {
-        outline: none; /* Cambia a tu color de marca */
+        outline: none;
         outline-offset: 2px;
     }
-    /* Detecta interacción de puntero y elimina el foco visible inmediatamente */
+
     .dxbl-toolbar .dxbl-btn[data-pointer="true"]:focus-visible {
         outline: none;
     }
-    .no-border{
-        border: 0;
-        border-radius: unset;
+
+    .no-border {
+        border: 0 !important;
+        border-radius: unset !important;
     }
 </style>

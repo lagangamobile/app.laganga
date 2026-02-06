@@ -21,3 +21,8 @@ public class SerieMovimiento : ISerieMovimiento
     public string CodigoItem { get; set; } = string.Empty;
     public string Serie { get; set; } = string.Empty;
 }
+
+public class SerieMovimientoDTO: SerieMovimiento
+{
+    public string Descripcion { get; set; } = string.Empty;
+}

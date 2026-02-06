@@ -463,7 +463,7 @@ else
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
 
-            var url = $"/store/EditarComprobanteMovimiento/des/{guid}";
+            var url = $"v1/bodega/EditarComprobanteMovimiento/des/{guid}";
             var resp = await apiClient.PostAsync<ComprobanteMovimiento>(url, dto,ct);
 
             if (resp?.succeeded == true)
@@ -537,7 +537,7 @@ else
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
             
-            var resp = await apiClient.PostAsync<OrigenMovimiento>("/store/ProcesarOrigenMovimiento/pro", dto,ct);
+            var resp = await apiClient.PostAsync<OrigenMovimiento>("v1/bodega/ProcesarOrigenMovimiento/pro", dto, ct);
 
             if (resp?.succeeded == true)
             {
@@ -609,7 +609,7 @@ else
             var ct = _cts.Token;
 
             // POST al endpoint con el objeto completo
-            var resp = await apiClient.PostAsync<OrigenMovimiento>("/store/EditarOrigenMovimiento/ref", dto,ct);
+            var resp = await apiClient.PostAsync<OrigenMovimiento>("v1/bodega/EditarOrigenMovimiento/ref", dto, ct);
 
             if (resp?.succeeded == true)
             {

@@ -1,0 +1,884 @@
+﻿@page "/Bodega/TomaSerie"
+@using com.laganga.app.Shared.Models
+@using com.laganga.app.Shared.Services
+@inject NavigationManager Nav
+@inject IApiGangaClient apiClient
+
+<div class="toma-serie-root">
+    <div class="toma-header">
+        <div class="header-title">
+            <h2>Generar Pistoleo</h2>
+        </div>
+        <button type="button" class="refresh-btn @(isLoading ? "spinning" : "")" title="Actualizar" @onclick="RefreshData" disabled="@isLoading">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+            </svg>
+        </button>
+    </div>
+
+    <div class="toma-form">
+        <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <div class="select-row">
+                <div class="select-wrapper">
+                    @if (isLoadingTipos)
+                    {
+                        <select class="form-select" disabled>
+                            <option>Cargando...</option>
+                        </select>
+                        <span class="select-spinner"></span>
+                    }
+                    else if (tiposPistoleo.Count == 0)
+                    {
+                        <select class="form-select" disabled>
+                            <option>Sin opciones disponibles</option>
+                        </select>
+                    }
+                    else
+                    {
+                        <select class="form-select" value="@selectedTipo" @onchange="OnTipoChanged">
+                            @foreach (var tipo in tiposPistoleo)
+                            {
+                                <option value="@tipo.Key">@tipo.Value</option>
+                            }
+                        </select>
+                        <svg class="select-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M7 10l5 5 5-5z" />
+                        </svg>
+                    }
+                </div>
+                @if (selectedTipo == "IP")
+                {
+                    <button type="button" class="add-btn" title="Nuevo" @onclick="OpenConfirmModal">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                    </button>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(errorTipos))
+            {
+                <div class="error-info">@errorTipos</div>
+            }
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Buscar</label>
+            <div class="input-wrapper">
+                <input type="text"
+                       class="form-input"
+                       placeholder="Buscar por # visible o ID"
+                       @bind="searchText"
+                       @bind:event="oninput" />
+                <div class="input-icon">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="M21 21l-4.35-4.35" />
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="items-section">
+        <div class="items-header">
+            <h3>Resultados</h3>
+            <span class="items-badge">@FilteredItems.Count Items</span>
+        </div>
+
+        <div class="items-list">
+            @if (FilteredItems.Count == 0)
+            {
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <path d="M9 9l6 6M15 9l-6 6" />
+                    </svg>
+                    <p>No hay elementos para mostrar</p>
+                </div>
+            }
+            else
+            {
+                <div class="items-grid">
+                    @foreach (var item in FilteredItems)
+                    {
+                        <button type="button"
+                                class="item-card"
+                                @onclick="() => OnItemClick(item.Key, item.Value)">
+                            <span class="item-number">#@item.Value</span>
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@* Modal de confirmación para nuevo pistoleo (tipo IP) *@
+@if (showConfirmModal)
+{
+    <div class="modal-backdrop" @onclick="() => showConfirmModal = false">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h4 id="confirmModalTitle" class="modal-title">Nuevo Pistoleo - @GetSelectedTipoName()</h4>
+                <button type="button"
+                        class="modal-close"
+                        title="Cerrar"
+                        aria-label="Cerrar"
+                        @onclick="() => showConfirmModal = false">
+                    ×
+                </button>
+            </div>
+            <div class="modal-body">
+                <div>
+                    ¿Está seguro que desea crear un nuevo pistoleo de tipo <strong>@GetSelectedTipoName()</strong>?
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" type="button" @onclick="() => showConfirmModal = false">Cerrar</button>
+                <button class="btn btn-primary" type="button" @onclick="@(() => CrearNuevoPistoleo())">Nuevo</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Modal de confirmación para item existente (Continuar o Nuevo) *@
+@if (showItemModal)
+{
+    <div class="modal-backdrop" @onclick="() => showItemModal = false">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="itemConfirmTitle" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h4 id="itemConfirmTitle" class="modal-title">Pistoleo - @GetSelectedTipoName()</h4>
+                <button type="button"
+                        class="modal-close"
+                        title="Cerrar"
+                        aria-label="Cerrar"
+                        @onclick="() => showItemModal = false">
+                    ×
+                </button>
+            </div>
+            <div class="modal-body">
+                <div>
+                    ¿Desea continuar con el pistoleo existente o crear uno nuevo para la secuencia:
+                    <strong>#@selectedSecuencia</strong>?
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" type="button" @onclick="() => showItemModal = false">Cerrar</button>
+
+                @if (selectedGuidId != null && selectedGuidId != Guid.Empty)
+                {
+                    <button class="btn btn-primary"
+                            type="button"
+                            @onclick="@(() => CrearNuevoPistoleo(selectedGuidId, selectedSecuencia))">
+                        Continuar
+                    </button>
+                }
+
+                <button class="btn btn-primary"
+                        type="button"
+                        @onclick="@(() => CrearNuevoPistoleo(null, selectedSecuencia))">
+                    Nuevo
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string DataOrigen { get { return "tipo_pistoleo"; } }
+    List<OrigenMovimiento> GridData { get; set; } = new();
+    private string selectedTipo = string.Empty;
+    private string searchText = string.Empty;
+    private bool isLoading;
+    private bool isLoadingTipos;
+    private string? errorTipos;
+    private string? loadError;
+    private List<CustomAttributes> tiposPistoleo = new();
+    private CancellationTokenSource? _cts;
+    private bool showConfirmModal;
+
+    // Variables para el modal de item existente
+    private bool showItemModal;
+    private Guid? selectedGuidId;
+    private string selectedSecuencia = string.Empty;
+
+    private IReadOnlyList<CustomAttributes> FilteredItems
+    {
+        get
+        {
+            var items = GridData
+                .Where(g => !string.IsNullOrWhiteSpace(g.IdentificadorOrigenVisible))
+                .Select(g => new CustomAttributes
+                {
+                    Key = g.Guid?.ToString() ?? string.Empty,
+                    Value = g.IdentificadorOrigenVisible
+                })
+                .ToList();
+
+            return string.IsNullOrWhiteSpace(searchText)
+                ? items
+                : items.Where(i => i.Value.Contains(searchText, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+    }
+
+    private Guid? ParseGuidOrNull(string key)
+    {
+        return Guid.TryParse(key, out var guid) ? guid : null;
+    }
+
+    private async Task OnTipoChanged(ChangeEventArgs e)
+    {
+        selectedTipo = e.Value?.ToString() ?? string.Empty;
+        await CargarDataAsync();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarTiposPistoleoAsync();
+        await CargarDataAsync();
+    }
+
+    private async Task CargarTiposPistoleoAsync()
+    {
+        errorTipos = null;
+
+        try
+        {
+            isLoadingTipos = true;
+            StateHasChanged();
+
+            _cts?.Cancel();
+            _cts?.Dispose();
+            _cts = new CancellationTokenSource();
+            var ct = _cts.Token;
+
+            var urlrequest = $"v1/bodega/TipoHandHeld/{DataOrigen}";
+            var response = await apiClient.GetAsync<List<CustomAttributes>>(urlrequest, ct);
+
+            if (response?.succeeded ?? false)
+            {
+                tiposPistoleo = response.data ?? new();
+
+                // Seleccionar el primer tipo por defecto si hay opciones
+                if (tiposPistoleo.Count > 0 && string.IsNullOrEmpty(selectedTipo))
+                {
+                    selectedTipo = tiposPistoleo.First().Key;
+                }
+            }
+            else
+            {
+                errorTipos = response?.message ?? "Error al cargar tipos de pistoleo.";
+                tiposPistoleo = new();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignorar cancelaciones
+        }
+        catch (Exception ex)
+        {
+            errorTipos = $"Error al cargar tipos: {ex.Message}";
+            tiposPistoleo = new();
+        }
+        finally
+        {
+            isLoadingTipos = false;
+            StateHasChanged();
+        }
+    }
+
+
+    private async Task CargarDataAsync()
+    {
+        loadError = null;
+        isLoading = true;
+        GridData.Clear();
+        StateHasChanged();
+
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        var ct = _cts.Token;
+
+        try
+        {
+            if (!AuthService.IsAuthenticated)
+            {
+                loadError = "Sesión no autenticada.";
+                Nav.NavigateTo("/loginU", replace: true);
+                return;
+            }
+
+            var urlRequest = $"v1/bodega/OrigenMovimientoMercaderia/{DataOrigen}/{selectedTipo}";
+            var response = await apiClient.GetAsync<List<OrigenMovimiento>>(urlRequest, ct);
+
+            if ((response?.succeeded ?? false) == false)
+            {
+                loadError = response?.message ?? $"Error interno: {response?.message}";
+                return;
+            }
+
+            if (response?.data is null)
+            {
+                loadError = "Respuesta sin datos.";
+                return;
+            }
+
+            GridData = response.data;
+        }
+        catch (OperationCanceledException) { }
+        catch (HttpRequestException ex)
+        {
+            loadError = $"Error HTTP: {ex.Message}";
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            loadError = $"Error parseando JSON: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            loadError = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+
+    private async Task RefreshData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        await CargarTiposPistoleoAsync();
+        await CargarDataAsync();
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private void SelectItem(string item)
+    {
+        Nav.NavigateTo($"/bodega/toma-serie-detalle?id={item}");
+    }
+
+    private void OpenConfirmModal()
+    {
+        showConfirmModal = true;
+    }
+
+    private void OnItemClick(string? guid, string secuencia)
+    {
+        selectedGuidId = Guid.TryParse(guid, out var aux_guid) ? aux_guid : null;
+        selectedSecuencia = secuencia;
+        showItemModal = true;
+    }
+
+    private string GetSelectedTipoName()
+    {
+        return tiposPistoleo.FirstOrDefault(t => t.Key == selectedTipo)?.Value ?? selectedTipo;
+    }
+
+    private async void CrearNuevoPistoleo(Guid? guid = null, string? secuencia = null)
+    {
+        showConfirmModal = false;
+        showItemModal = false;
+
+        if (guid == null || guid == Guid.Empty) guid = Guid.NewGuid();
+
+
+        await SessionStorage.SetItemAsync($"{guid}-Tipo", selectedTipo);
+        await SessionStorage.SetItemAsync($"{guid}-Secuencia", (string.IsNullOrEmpty(secuencia) ? "0" : secuencia));
+
+        Nav.NavigateTo($"/bodega/toma-serie-detalle/{guid}", true, true);
+    }
+
+    public void Dispose()
+    {
+        try { _cts?.Cancel(); } catch (ObjectDisposedException) { }
+        _cts?.Dispose();
+        _cts = null;
+    }
+}
+
+<style>
+    .toma-serie-root {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        background: #f8fafc;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .toma-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .header-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .header-icon {
+        color: #5bd0ef;
+    }
+
+    .header-title h2 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #000064;
+    }
+
+    .refresh-btn {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #0d6efd;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s;
+    }
+
+        .refresh-btn:hover:not(:disabled) {
+            background: rgba(91, 208, 239, 0.1);
+            border-color: #5bd0ef;
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .refresh-btn.spinning svg {
+            animation: spin 1s linear infinite;
+        }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .toma-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .form-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #64748b;
+        margin-bottom: 0;
+    }
+
+    .select-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .input-wrapper,
+    .select-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        flex: 1;
+    }
+
+    .form-input,
+    .form-select {
+        width: 100%;
+        padding: 0.8rem 2.5rem 0.8rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        background: #f8fafc;
+        font-size: 0.95rem;
+        color: #1e293b;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        appearance: none;
+    }
+
+        .form-input::placeholder {
+            color: #94a3b8;
+        }
+
+        .form-input:focus,
+        .form-select:focus {
+            border-color: #5bd0ef;
+            box-shadow: 0 0 0 3px rgba(91, 208, 239, 0.2);
+        }
+
+        .form-select:disabled {
+            background: #e9ecef;
+            cursor: not-allowed;
+        }
+
+    .input-icon,
+    .select-icon {
+        position: absolute;
+        right: 0.75rem;
+        color: #94a3b8;
+        pointer-events: none;
+    }
+
+    .select-spinner {
+        position: absolute;
+        right: 0.75rem;
+        width: 18px;
+        height: 18px;
+        border: 2px solid #e2e8f0;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    .add-btn {
+        width: 42px;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #0d6efd;
+        background: #0d6efd;
+        color: #fff;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+        flex-shrink: 0;
+    }
+
+        .add-btn:hover {
+            background: #0a58ca;
+        }
+
+        .add-btn:active {
+            transform: scale(0.95);
+        }
+
+    .error-info {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.6rem;
+        border-radius: 0.5rem;
+        margin-top: 0.25rem;
+        background: rgba(220, 53, 69, 0.1);
+        color: #dc3545;
+    }
+
+    .items-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: #f1f5f9;
+        border-top: 1px solid #e2e8f0;
+        margin-top: 1rem;
+        border-radius: 0.75rem 0.75rem 0 0;
+    }
+
+    .items-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(8px);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+    }
+
+        .items-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+    .items-badge {
+        background: rgba(91, 208, 239, 0.15);
+        color: #5bd0ef;
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 0.3rem 0.6rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(91, 208, 239, 0.25);
+    }
+
+    .items-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.75rem 0 5rem;
+    }
+
+    .items-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.65rem;
+    }
+
+    .item-card {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 1rem;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        cursor: pointer;
+        transition: box-shadow 0.2s, transform 0.15s, border-color 0.2s;
+    }
+
+        .item-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transform: translateY(-1px);
+            border-color: rgba(91, 208, 239, 0.4);
+        }
+
+        .item-card:active {
+            transform: translateY(0);
+        }
+
+    .item-number {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #000064;
+        transition: color 0.2s;
+    }
+
+    .item-card:hover .item-number {
+        color: #5bd0ef;
+    }
+
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 1rem;
+        color: #94a3b8;
+    }
+
+        .empty-state p {
+            margin: 0.75rem 0 0;
+            font-size: 0.9rem;
+        }
+
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 1rem;
+    }
+
+    .modal-card {
+        width: min(420px, 96vw);
+        max-height: 92vh;
+        background: #fff;
+        color: #0f172a;
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #e6e9ef;
+        background: #f8fafc;
+    }
+
+    .modal-title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .modal-close {
+        border: none;
+        background: transparent;
+        font-size: 1.3rem;
+        line-height: 1;
+        cursor: pointer;
+        color: #334155;
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+    }
+
+        .modal-close:hover {
+            background: #eef2f7;
+        }
+
+    .modal-body {
+        padding: 0.9rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+        overflow: auto;
+    }
+
+    .modal-footer {
+        padding: 0.75rem 1rem;
+        border-top: 1px solid #e6e9ef;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        background: #f8fafc;
+    }
+
+    .btn {
+        padding: 0.45rem 0.8rem;
+        border-radius: 6px;
+        border: 1px solid #cfd6e4;
+        background: #ffffff;
+        color: #334155;
+        cursor: pointer;
+        font-size: 0.9rem;
+    }
+
+    .btn-primary {
+        background: #0d6efd;
+        border-color: #0d6efd;
+        color: #fff;
+    }
+
+        .btn-primary:hover {
+            background: #0a58ca;
+        }
+
+    .btn-secondary:hover {
+        background: #eef2f7;
+    }
+
+    @@media (prefers-color-scheme: dark) {
+        .toma-serie-root {
+            background: #0d1117;
+        }
+
+        .header-title h2 {
+            color: #5bd0ef;
+        }
+
+        .refresh-btn {
+            background: #161b22;
+            border-color: #30363d;
+        }
+
+        .form-input,
+        .form-select {
+            background: #0d1117;
+            border-color: #30363d;
+            color: #f0f6fc;
+        }
+
+        .items-section {
+            background: #0d1117;
+            border-color: #30363d;
+        }
+
+        .items-header {
+            background: rgba(22, 27, 34, 0.9);
+        }
+
+            .items-header h3 {
+                color: #f0f6fc;
+            }
+
+        .item-card {
+            background: #161b22;
+            border-color: #30363d;
+        }
+
+            .item-card:hover {
+                border-color: rgba(91, 208, 239, 0.5);
+            }
+
+        .item-number {
+            color: #f0f6fc;
+        }
+
+        .item-card:hover .item-number {
+            color: #5bd0ef;
+        }
+
+        .modal-card {
+            background: #161b22;
+            color: #f0f6fc;
+        }
+
+        .modal-header,
+        .modal-footer {
+            background: #0d1117;
+            border-color: #30363d;
+        }
+
+        .modal-title {
+            color: #f0f6fc;
+        }
+
+        .modal-close {
+            color: #f0f6fc;
+        }
+
+            .modal-close:hover {
+                background: #30363d;
+            }
+
+        .btn {
+            background: #21262d;
+            border-color: #30363d;
+            color: #f0f6fc;
+        }
+
+        .btn-secondary:hover {
+            background: #30363d;
+        }
+    }
+
+    @@media (max-width: 480px) {
+        .items-grid {
+            gap: 0.5rem;
+        }
+
+        .item-card {
+            padding: 0.85rem;
+        }
+
+        .item-number {
+            font-size: 1rem;
+        }
+    }
+</style>

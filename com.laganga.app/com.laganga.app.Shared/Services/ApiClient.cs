@@ -100,6 +100,7 @@ public class ApiClient : IApiClient, IApiGangaClient, IApiGangaOauth
         catch (JsonException)
         {
             // Si el contenido no es JSON válido, generamos una respuesta uniforme
+            throw new ArgumentException("El contenido de la respuesta no es un Objeto válido.");
         }
 
         // Si hay error o el JSON no es válido, devolvemos Response de error

@@ -55,17 +55,7 @@
                        SizeMode="SizeMode.Small"
                        CssClass="manual-input" />
             @* filters-Identificador *@
-            @if (PreferredTipoEgreso == "E")
-            {
-                <DxTextBox LabelText="Bodega"
-                           @bind-Text="@selectedBodega"
-                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                           BindValueMode="BindValueMode.OnInput"
-                           NullText="Ingrese Bodega"
-                           SizeMode="SizeMode.Small"
-                           CssClass="manual-input"
-                           InputId="tbClearButton" />
-            }
+            
 
             <div class="manual-actions">
                 <DxButton Text="Abrir"
@@ -74,7 +64,21 @@
             </div>
         </div>
     }
-    
+
+
+    @if (PreferredTipoEgreso == "E")
+    {
+        <div class="manual-grid">
+            <DxTextBox LabelText="Bodega"
+                       @bind-Text="@selectedBodega"
+                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                       BindValueMode="BindValueMode.OnInput"
+                       NullText="Ingrese Bodega"
+                       SizeMode="SizeMode.Small"
+                       CssClass="manual-input"
+                       InputId="tbClearButton" />
+        </div>
+    }
 
     <div class="manual-grid">
         <div class="filters-row">
@@ -195,6 +199,7 @@
     [SupplyParameterFromQuery(Name = "tipoPantalla")]
     public string? tipoPantalla { get; set; } = "";
     private string? _lastTipoPantalla;
+    private string DataOrigen { get { return "tipo_origen"; }}
 
     public bool datosCambiados { get; set; } = false;
 
@@ -227,6 +232,11 @@
     string selectedIdentificadorOrigenVisible = default!;
     Guid? selectedGuidId = null;
     string selectedBodega = "000";
+
+    private string selectedTipo = string.Empty;
+    private bool isLoadingTipos;
+    private string? errorTipos;
+    private List<CustomAttributes> tiposPistoleo = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -311,6 +321,56 @@
         await LoadDataAsync();
     }
 
+    private async Task CargarTiposPistoleoAsync()
+    {
+        errorTipos = null;
+
+        try
+        {
+            isLoadingTipos = true;
+            StateHasChanged();
+
+            _cts?.Cancel();
+            _cts?.Dispose();
+            _cts = new CancellationTokenSource();
+            var ct = _cts.Token;
+
+            var urlrequest = $"v1/bodega/TipoHandHeld/{DataOrigen}";
+            var response = await apiClient.GetAsync<List<CustomAttributes>>(urlrequest, ct);
+
+            if (response?.succeeded ?? false)
+            {
+                tiposPistoleo = response.data ?? new();
+
+                // Seleccionar el primer tipo por defecto si hay opciones
+                if (tiposPistoleo.Count > 0 && string.IsNullOrEmpty(selectedTipo))
+                {
+                    selectedTipo = tiposPistoleo.First().Key;
+                }
+            }
+            else
+            {
+                errorTipos = response?.message ?? "Error al cargar tipos de pistoleo.";
+                tiposPistoleo = new();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Ignorar cancelaciones
+        }
+        catch (Exception ex)
+        {
+            errorTipos = $"Error al cargar tipos: {ex.Message}";
+            tiposPistoleo = new();
+        }
+        finally
+        {
+            isLoadingTipos = false;
+            StateHasChanged();
+        }
+    }
+
+
     private async Task LoadDataAsync()
     {
         loadError = null;
@@ -327,11 +387,11 @@
             if (!AuthService.IsAuthenticated)
             {
                 loadError = "Sesión no autenticada.";
-                Nav.NavigateTo("/login", replace: true);
+                Nav.NavigateTo("/loginU", replace: true);
                 return;
             }
 
-            var urlRequest = $"store/OrigenMovimientoMercaderia/{PreferredTipoEgreso}";
+            var urlRequest = $"v1/bodega/OrigenMovimientoMercaderia/{DataOrigen}/{PreferredTipoEgreso}";
             var response = await apiClient.GetAsync<List<OrigenMovimiento>>(urlRequest, ct);
 
             if ((response?.succeeded ?? false) == false)

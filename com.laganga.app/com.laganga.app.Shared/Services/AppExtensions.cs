@@ -24,10 +24,10 @@ public static partial class AppExtensions
         services.AddTransient<TokenAuthorizationMessageHandler>();
         services.AddTransient<ResilientApiHandler>();
 
-        string authDomain = "https://auth.laganga.com";
-        string apiBaseUrl = "https://api.laganga.com";
+        string authDomain = "https://auth.laganga.com/";
+        string apiBaseUrl = "https://api.laganga.com/";
 #if DEBUG
-        authDomain = "https://auth-stg.laganga.com";
+        authDomain = "https://auth-stg.laganga.com/";
         apiBaseUrl = "https://api-stg.laganga.com/";
 
 #endif
