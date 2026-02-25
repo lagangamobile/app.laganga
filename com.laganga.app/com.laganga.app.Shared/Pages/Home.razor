@@ -1,11 +1,12 @@
 ﻿@page "/"
 @using com.laganga.app.Shared.Services
 @inject IFormFactor FormFactor
+@implements IDisposable
 
 <div class="home-root">
     <div class="home-header">
         <p class="welcome-label">Bienvenido</p>
-        <h1 class="welcome-title">@((AuthService.CurrentUser?.FindFirst("given_name")?.Value + " " + AuthService.CurrentUser?.FindFirst("family_name")?.Value) ?? "")</h1>
+        <h1 class="welcome-title">@UserDisplayName</h1>
     </div>
 
     <div class="home-actions">
@@ -45,7 +46,54 @@
 </div>
 
 @code {
+    private string UserDisplayName => GetUserDisplayName();
 
+    protected override void OnInitialized()
+    {
+        AuthService.AuthenticationStateChanged += OnAuthStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && AuthService.IsAuthenticated)
+        {
+            await AuthService.EnsureClaimsLoadedAsync();
+        }
+    }
+
+    private string GetUserDisplayName()
+    {
+        var user = AuthService.CurrentUser;
+        if (user == null) return string.Empty;
+
+        var givenName = user.FindFirst("given_name")?.Value;
+        var familyName = user.FindFirst("family_name")?.Value;
+        
+        if (!string.IsNullOrEmpty(givenName) || !string.IsNullOrEmpty(familyName))
+        {
+            return $"{givenName} {familyName}".Trim();
+        }
+
+        // Fallback a name o nickname
+        var name = user.FindFirst("name")?.Value;
+        if (!string.IsNullOrEmpty(name)) return name;
+
+        var nickname = user.FindFirst("nickname")?.Value;
+        if (!string.IsNullOrEmpty(nickname)) return nickname;
+
+        // Último recurso: ClaimTypes.Name
+        return user.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? string.Empty;
+    }
+
+    private void OnAuthStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        AuthService.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
 }
 
 <style>

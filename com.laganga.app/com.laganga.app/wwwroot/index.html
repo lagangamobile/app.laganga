@@ -5,6 +5,65 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>com.laganga.app</title>
     <base href="/" />
+
+    <!-- Estilos críticos inline para evitar flash blanco -->
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background-color: #000064 !important;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+
+        #app {
+            background-color: #000064;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
+
+        /* Loader inicial */
+        @keyframes initial-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        #initial-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #000064;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.25s ease-out;
+        }
+
+            #initial-loader.fade-out {
+                opacity: 0;
+                pointer-events: none;
+            }
+
+            #initial-loader .loader-ring {
+                border: 4px solid #5bd0ef;
+                border-top-color: #ffffff;
+                border-radius: 50%;
+                width: 56px;
+                height: 56px;
+                animation: initial-spin 1s linear infinite;
+            }
+
+        /* Clase para cuando la app está lista - permite que Blazor controle el fondo */
+        body.app-ready,
+        body.app-ready #app {
+            background-color: transparent !important;
+        }
+    </style>
+
     <!-- Bootstrap and App CSS -->
     <link rel="stylesheet" href="_content/com.laganga.app.Shared/bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="_content/com.laganga.app.Shared/app.css" />
@@ -17,9 +76,62 @@
 
     <div class="status-bar-safe-area"></div>
 
-    <div id="app">Loading...</div>
+    <div id="app"></div>
+
+    <!-- Loader inicial -->
+    <div id="initial-loader">
+        <div class="loader-ring"></div>
+    </div>
 
     <script src="_framework/blazor.webview.js" autostart="false"></script>
+
+    <script>
+        (function () {
+            var checkInterval;
+            var maxChecks = 100;
+            var checkCount = 0;
+
+            function hideInitialLoader() {
+                var loader = document.getElementById('initial-loader');
+                if (loader) {
+                    loader.classList.add('fade-out');
+                    setTimeout(function () {
+                        if (loader.parentNode) {
+                            loader.parentNode.removeChild(loader);
+                        }
+                        document.body.classList.add('app-ready');
+                    }, 250);
+                }
+            }
+
+            function checkForBlazorContent() {
+                checkCount++;
+
+                // Buscar contenido real de Blazor
+                var blazorAuthLoader = document.querySelector('.auth-loading-screen');
+                var mainContent = document.querySelector('.layout-root, .login-page-root, .home-root');
+
+                if (blazorAuthLoader || mainContent) {
+                    clearInterval(checkInterval);
+                    hideInitialLoader();
+                    return;
+                }
+
+                if (checkCount >= maxChecks) {
+                    clearInterval(checkInterval);
+                    hideInitialLoader();
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function () {
+                    checkInterval = setInterval(checkForBlazorContent, 100);
+                });
+            } else {
+                checkInterval = setInterval(checkForBlazorContent, 100);
+            }
+        })();
+    </script>
 
 </body>
 

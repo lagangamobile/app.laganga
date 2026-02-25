@@ -6,26 +6,84 @@
 @DxResourceManager.RegisterTheme(Themes.Fluent)
 @implements IDisposable
 
-<Router AppAssembly="typeof(Layout.MainLayout).Assembly">
-    <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
-    </Found>
-    <NotFound>
-        <PageTitle>Not found</PageTitle>
-        <LayoutView Layout="@typeof(Layout.MainLayout)">
-            <p role="alert">Sorry, there's nothing at this address.</p>
-        </LayoutView>
-    </NotFound>
-</Router>
+@if (!_isReady)
+{
+    <!-- Pantalla de carga mientras se inicializa la autenticación -->
+    <div class="auth-loading-screen">
+        <div class="auth-loading-content">
+            <div class="auth-loader-ring"></div>
+        </div>
+    </div>
+}
+else
+{
+    <Router AppAssembly="typeof(Layout.MainLayout).Assembly">
+        <Found Context="routeData">
+            <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <PageTitle>Not found</PageTitle>
+            <LayoutView Layout="@typeof(Layout.MainLayout)">
+                <p role="alert">Sorry, there's nothing at this address.</p>
+            </LayoutView>
+        </NotFound>
+    </Router>
+}
+
+<style>
+    .auth-loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #000064;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    .auth-loading-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    @@keyframes auth-spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .auth-loader-ring {
+        border: 4px solid #5bd0ef;
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        width: 56px;
+        height: 56px;
+        animation: auth-spin 1s linear infinite;
+    }
+</style>
 
 @code {
     private IDisposable? _navReg;
+    private bool _isReady;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Esperar a que el servicio de autenticación termine de inicializarse
+        await AuthService.WaitForInitializationAsync();
+        
+        _isReady = true;
+        
+        // Registrar handlers después de la inicialización
         _navReg = NavigationManager.RegisterLocationChangingHandler(OnLocationChanging);
         AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        
+        // Realizar la redirección inicial basada en el estado de autenticación
         HandleAuthenticationRedirect();
     }
 
@@ -38,7 +96,7 @@
         if (!AuthService.IsAuthenticated && !IsLoginUri(target))
         {
             context.PreventNavigation();
-            NavigationManager.NavigateTo("/loginU", forceLoad: true, replace: true);
+            NavigationManager.NavigateTo("/loginU", replace: true);
             return;
         }
 
@@ -49,11 +107,6 @@
             return;
         }
 
-        await Task.CompletedTask;
-    }
-
-    protected override async Task OnInitializedAsync()
-    {
         await Task.CompletedTask;
     }
 
@@ -76,14 +129,17 @@
         else
         {
             if (!IsLoginUri(NavigationManager.Uri))
-                NavigationManager.NavigateTo("/loginU", forceLoad: true, replace: true);
+                NavigationManager.NavigateTo("/loginU", replace: true);
         }
     }
 
     private void OnAuthenticationStateChanged()
     {
-        HandleAuthenticationRedirect();
-        StateHasChanged();
+        InvokeAsync(() =>
+        {
+            HandleAuthenticationRedirect();
+            StateHasChanged();
+        });
     }
 
     public void Dispose()

@@ -4,8 +4,9 @@
 @inject IAuthenticationService AuthService
 @inject ParameterService ParamService
 @inject NavigationManager NavigationManager
+@implements IDisposable
 
-<DxMenu Title="@currentUserNickname"
+<DxMenu Title="@CurrentUserDisplayName"
         Orientation="@Orientation.Vertical"
         DisplayMode="@MenuDisplayMode.Auto"
         CollapseItemsToHamburgerMenu="true"
@@ -14,10 +15,10 @@
         ItemClick="HandleItemClick">
     <Items>
         <DxMenuItem NavigateUrl="/"
-                    Text="Home"
+                    Text="Inicio"
                     IconCssClass="bi bi-house-door-fill" />
 
-        <DxMenuItem Text="Ingreso de Mercadería"
+       @*  <DxMenuItem Text="Ingreso de Mercadería"
                     IconCssClass="bi bi-box-seam">
             <Items>
                 <DxMenuItem NavigateUrl="/Bodega/IngresoOrdenCompra"
@@ -30,7 +31,7 @@
                             Text="Sin Origen"
                             IconCssClass="bi bi-file-plus" />
             </Items>
-        </DxMenuItem>
+        </DxMenuItem> *@
 
         <DxMenuItem Text="Egreso de Mercadería"
                     IconCssClass="bi bi-box-seam">
@@ -48,14 +49,14 @@
                     IconCssClass="bi bi-qr-code"
                     NavigateUrl="/bodega/TomaSerie" />
 
-        <DxMenuItem Text="Logout"
+        <DxMenuItem Text="Cerrar Sesión"
                     IconCssClass="bi bi-box-arrow-right"
                     @onclick="HandleLogout" />
     </Items>
 </DxMenu>
 
 @code {
-    private string currentUserNickname => AuthService.CurrentUser?.FindFirst("nickname")?.Value ?? "La Ganga";
+    private string CurrentUserDisplayName => GetUserDisplayName();
 
     [Parameter] public EventCallback OnNavigate { get; set; }
 
@@ -64,7 +65,35 @@
         AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
     }
 
-    private void OnAuthenticationStateChanged() => StateHasChanged();
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && AuthService.IsAuthenticated)
+        {
+            await AuthService.EnsureClaimsLoadedAsync();
+        }
+    }
+
+    private string GetUserDisplayName()
+    {
+        var user = AuthService.CurrentUser;
+        if (user == null) return "La Ganga";
+
+        var nickname = user.FindFirst("nickname")?.Value;
+        if (!string.IsNullOrEmpty(nickname)) return nickname;
+
+        var givenName = user.FindFirst("given_name")?.Value;
+        if (!string.IsNullOrEmpty(givenName)) return givenName;
+
+        var name = user.FindFirst("name")?.Value;
+        if (!string.IsNullOrEmpty(name)) return name;
+
+        return user.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? "La Ganga";
+    }
+
+    private void OnAuthenticationStateChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
 
     public void Dispose()
     {
