@@ -8,154 +8,207 @@
 @inject IApiGangaClient apiClient
 @inject IJSRuntime JS
 
-<div class="title-bar">
-    <h3 class="page-title">Egreso de Comprobantes</h3>
-
-    <button type="button"
-            class="@($"refresh-btn{(isLoading ? " spinning" : "")}")"
-            @onclick="LoadDataAsync"
-            disabled="@isLoading"
-            aria-label="Actualizar"
-            title="Actualizar">
-        <svg class="refresh-icn" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <polyline points="21 3 21 9 15 9" />
-        </svg>
-    </button>
-</div>
-
-<!-- Encabezado fijo dentro del contenedor -->
-<div class="top-header">
-    <div class="filters">
-        <div class="filters-row">
-            <label class="section-title">Tipo</label>
-            <DxRadioGroup Id="rdgrpTipoEgreso"
-                          Items="@ItemsTipoEgreso"
-                          TextFieldName="DisplayText"
-                          ValueFieldName="IdValue"
-                          Value="@PreferredTipoEgreso"
-                          ValueChanged="@((string newValue) => OnPreferredTipoEgresoChanged(newValue))"
-                          Layout="DevExpress.Blazor.RadioGroupLayout.Horizontal"
-                          CssClass="dx-custom-radio-group"
-                          aria-label="Tipo de Egreso"
-                          SizeMode="SizeMode.Small" />
+<div class="egreso-root">
+    <div class="egreso-header">
+        <div class="header-title">
+            <h2>Egreso de Comprobantes</h2>
         </div>
+        <button type="button"
+                class="refresh-btn @(isLoading ? "spinning" : "")"
+                title="Actualizar"
+                @onclick="RefreshData"
+                disabled="@isLoading">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+            </svg>
+        </button>
     </div>
 
-    <!-- Panel de Ingreso Manual -->
-    @if ((AuthService.CurrentUser?.FindFirst("control")?.Value ?? "no").Equals("total"))
-    {
-        <div class="manual-grid">
-            <DxTextBox LabelText="@GetTipoName()"
-                       @bind-Text="@selectedIdentificadorOrigen"
-                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                       BindValueMode="BindValueMode.OnInput"
-                       NullText="@($"Ingrese {GetTipoName()}")"
-                       SizeMode="SizeMode.Small"
-                       CssClass="manual-input" />
-            @* filters-Identificador *@
-            
+    <div class="egreso-form">
+        @* Selector de Tipo (cargado desde API) con botón + *@
+        <div class="form-group">
+            <label class="form-label">Tipo</label>
+            <div class="select-row">
+                <div class="select-wrapper">
+                    @if (isLoadingTipos)
+                    {
+                        <select class="form-select" disabled>
+                            <option>Cargando...</option>
+                        </select>
+                        <span class="select-spinner"></span>
+                    }
+                    else if (tiposPistoleo.Count == 0)
+                    {
+                        <select class="form-select" disabled>
+                            <option>Sin opciones disponibles</option>
+                        </select>
+                    }
+                    else
+                    {
+                        <select class="form-select" value="@selectedTipo" @onchange="OnTipoChanged">
+                            @foreach (var tipo in tiposPistoleo)
+                            {
+                                <option value="@tipo.Key">@tipo.Value</option>
+                            }
+                        </select>
+                        <svg class="select-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <path d="M7 10l5 5 5-5z" />
+                        </svg>
+                    }
+                </div>
+                <button type="button" class="add-btn" title="Ingreso Manual" @onclick="OpenManualModal">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19" />
+                        <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                </button>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(errorTipos))
+            {
+                <div class="error-info">@errorTipos</div>
+            }
+        </div>
 
-            <div class="manual-actions">
-                <DxButton Text="Abrir"
-                          Click="() => OnAbrirClick(selectedIdentificadorOrigen)"
-                          ButtonType="ButtonType.Normal" />
+        @* Buscador *@
+        <div class="form-group">
+            <label class="form-label">Buscar</label>
+            <div class="input-wrapper">
+                <input type="text"
+                       class="form-input"
+                       placeholder="Buscar por # visible o ID"
+                       @bind="searchText"
+                       @bind:event="oninput" />
+                <div class="input-icon">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="M21 21l-4.35-4.35" />
+                    </svg>
+                </div>
             </div>
         </div>
-    }
-
-
-    @if (PreferredTipoEgreso == "E")
-    {
-        <div class="manual-grid">
-            <DxTextBox LabelText="Bodega"
-                       @bind-Text="@selectedBodega"
-                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                       BindValueMode="BindValueMode.OnInput"
-                       NullText="Ingrese Bodega"
-                       SizeMode="SizeMode.Small"
-                       CssClass="manual-input"
-                       InputId="tbClearButton" />
-        </div>
-    }
-
-    <div class="manual-grid">
-        <div class="filters-row">
-            <DxTextBox LabelText="Buscar"
-                       @bind-Text="searchText"
-                       BindValueMode="BindValueMode.OnInput"
-                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                       NullText="Buscar por # visible o ID"
-                       SizeMode="SizeMode.Small"
-                       aria-label="Buscar secuencia"
-                       CssClass="manual-input" />
-        </div>
     </div>
 
-    <!-- Buscador de ítems -->
-
-</div>
-
-<!-- Zona central que se desplaza -->
-<div class="scroll-area">
-    @if (isLoading)
-    {
-        <div class="status-block info">Cargando datos...</div>
-    }
-    else if (!string.IsNullOrEmpty(loadError))
-    {
-        <div class="status-block error">
-            @loadError
-            <DxButton Text="Reintentar"
-                      ButtonType="ButtonType.Normal"
-                      CssClass="retry-btn"
-                      Click="LoadDataAsync" />
+    @* Sección de resultados *@
+    <div class="items-section">
+        <div class="items-header">
+            <h3>Resultados</h3>
+            <span class="items-badge">@FilteredGridData.Count Items</span>
         </div>
-    }
-    else
-    {
 
-        
-
-        <!-- Listado visual en 2 columnas, desplazamiento vertical -->
-        <section class="items-section">
-            @if (GridData?.Count == 0)
+        <div class="items-list">
+            @if (isLoading)
             {
-                <div class="empty-hint">No hay elementos para mostrar.</div>
+                <div class="empty-state">
+                    <svg class="loading-spinner" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                    </svg>
+                    <p>Cargando datos...</p>
+                </div>
+            }
+            else if (!string.IsNullOrEmpty(loadError))
+            {
+                <div class="empty-state error-state">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 8v4M12 16h.01" />
+                    </svg>
+                    <p>@loadError</p>
+                    <button type="button" class="retry-btn" @onclick="LoadDataAsync">Reintentar</button>
+                </div>
             }
             else if (FilteredGridData.Count == 0)
             {
-                <div class="empty-hint">Sin coincidencias para "@searchText".</div>
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                        <path d="M9 9l6 6M15 9l-6 6" />
+                    </svg>
+                    <p>
+                        @if (!string.IsNullOrWhiteSpace(searchText))
+                        {
+                            <span>Sin coincidencias para "@searchText"</span>
+                        }
+                        else
+                        {
+                            <span>No hay elementos para mostrar</span>
+                        }
+                    </p>
+                </div>
             }
             else
             {
-                <div class="items-grid" role="list" aria-label="Listado de secuencias">
+                <div class="items-grid">
                     @foreach (var it in FilteredGridData)
                     {
-                        <div class="comp-card"
-                             role="listitem"
-                             tabindex="0"
-                             title="@it.IdentificadorOrigenVisible"
-                             @onclick="@(() => OnAbrirClick(it.IdentificadorOrigen))">
-                            <div class="comp-row">
-                                <div class="comp-num">#@it.IdentificadorOrigenVisible</div>
-                            </div>
-                        </div>
+                        <button type="button"
+                                class="item-card"
+                                @onclick="@(() => OnAbrirClick(it.IdentificadorOrigen))">
+                            <span class="item-number">#@it.IdentificadorOrigenVisible</span>
+                        </button>
                     }
                 </div>
             }
-        </section>
-    }
+        </div>
+    </div>
 </div>
 
-@* Modal de confirmación (reemplaza DxPopup) *@
+@* Modal de Ingreso Manual *@
+@if (showManualModal)
+{
+    <div class="modal-backdrop" @onclick="CloseManualModal">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="manualModalTitle" @onclick:stopPropagation>
+            <div class="modal-header">
+                <h4 id="manualModalTitle" class="modal-title">Ingreso Manual - @GetSelectedTipoName()</h4>
+                <button type="button"
+                        class="modal-close"
+                        title="Cerrar"
+                        aria-label="Cerrar"
+                        @onclick="CloseManualModal">
+                    ×
+                </button>
+            </div>
+            <div class="modal-body">
+                @if (selectedTipo == "CE")
+                {
+                    <div class="form-group">
+                        <label class="form-label">Bodega</label>
+                        <div class="input-wrapper">
+                            <input type="text"
+                                   class="form-input"
+                                   placeholder="Ingrese Bodega"
+                                   @bind="manualBodega"
+                                   @bind:event="oninput" />
+                        </div>
+                    </div>
+                }
+                <div class="form-group">
+                    <label class="form-label">@GetSelectedTipoName()</label>
+                    <div class="input-wrapper">
+                        <input type="text"
+                               class="form-input"
+                               placeholder="@($"Ingrese {GetSelectedTipoName()}")"
+                               @bind="manualIdentificador"
+                               @bind:event="oninput" />
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" type="button" @onclick="CloseManualModal">Cancelar</button>
+                <button class="btn btn-primary" type="button" @onclick="OnManualAceptar">Aceptar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@* Modal de confirmación *@
 @if (showPopup)
 {
     <div class="modal-backdrop" @onclick="() => showPopup = false">
         <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="egresoConfirmTitle" @onclick:stopPropagation>
             <div class="modal-header">
-                <h4 id="egresoConfirmTitle" class="modal-title">Toma Egresos Comprobantes - @GetTipoName()</h4>
+                <h4 id="egresoConfirmTitle" class="modal-title">Toma Egresos Comprobantes - @GetSelectedTipoName()</h4>
                 <button type="button"
                         class="modal-close"
                         title="Cerrar"
@@ -166,14 +219,14 @@
             </div>
             <div class="modal-body">
                 <div>
-                    Esta seguro que desea tomar el egreso de comprobantes para la @GetTipoName():
-                    <strong>@selectedIdentificadorOrigenVisible</strong> ?
+                    ¿Está seguro que desea tomar el egreso de comprobantes para la @GetSelectedTipoName():
+                    <strong>@selectedIdentificadorOrigenVisible</strong>?
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" type="button" @onclick="() => showPopup = false">Cerrar</button>
 
-                @if (!(selectedGuidId == null || selectedGuidId == Guid.Empty))
+                @if (selectedGuidId != null && selectedGuidId != Guid.Empty)
                 {
                     <button class="btn btn-primary"
                             type="button"
@@ -192,22 +245,26 @@
     </div>
 }
 
-
-
 @code {
     [Parameter]
     [SupplyParameterFromQuery(Name = "tipoPantalla")]
     public string? tipoPantalla { get; set; } = "";
     private string? _lastTipoPantalla;
-    private string DataOrigen { get { return "tipo_origen"; }}
+    private string DataOrigen => "tipo_origen";
+
+    private string GetDataOrigen()
+    {
+        return tipoPantalla switch
+        {
+            "OrigenBodega" => "tipo_origen_B",
+            "OrigenSucursal" => "tipo_origen_S",
+            _ => "tipo_origen"
+        };
+    }
 
     public bool datosCambiados { get; set; } = false;
 
-    List<TipoEgresoItem> ItemsTipoEgreso { get; set; } = new();
-    string PreferredTipoEgreso { get; set; } = string.Empty;
-
     List<OrigenMovimiento> GridData { get; set; } = new();
-    DxGrid? Grid { get; set; }
 
     string searchText { get; set; } = string.Empty;
 
@@ -238,15 +295,20 @@
     private string? errorTipos;
     private List<CustomAttributes> tiposPistoleo = new();
 
+    // Variables para el modal de ingreso manual
+    private bool showManualModal;
+    private string manualBodega = "000";
+    private string manualIdentificador = string.Empty;
+
     protected override async Task OnInitializedAsync()
     {
         _navReg = Nav.RegisterLocationChangingHandler(OnLocationChanging);
         AuthService.AuthenticationStateChanged += OnAuthChanged;
-        initParametros();
 
         if (!AuthService.IsAuthenticated)
             return;
 
+        await CargarTiposPistoleoAsync();
         await LoadDataAsync();
     }
 
@@ -272,12 +334,13 @@
             return;
 
         _lastTipoPantalla = tipoPantalla;
-        initParametros();
+        selectedTipo = string.Empty;
+        await CargarTiposPistoleoAsync();
         await LoadDataAsync();
     }
 
-    string GetTipoName()
-        => ItemsTipoEgreso.FirstOrDefault(p => p.IdValue == PreferredTipoEgreso)?.DisplayText ?? string.Empty;
+    private string GetSelectedTipoName()
+        => tiposPistoleo.FirstOrDefault(t => t.Key == selectedTipo)?.Value ?? selectedTipo;
 
     public void Dispose()
     {
@@ -288,35 +351,9 @@
         _navReg?.Dispose();
     }
 
-    private void initParametros()
+    private async Task OnTipoChanged(ChangeEventArgs e)
     {
-        if (_lastTipoPantalla is null) _lastTipoPantalla = tipoPantalla;
-        switch (tipoPantalla)
-        {
-            case "OrigenBodega":
-                ItemsTipoEgreso = new() {
-                    new() { DisplayText = "ID Cubicaje", IdValue = "C" },
-                    new() { DisplayText = "ID HojaRuta", IdValue = "H" },
-                    new() { DisplayText = "Compt. Egreso/Factura", IdValue = "E" }
-                };
-                break;
-            case "OrigenSucursal":
-                ItemsTipoEgreso = new() {
-                    new() { DisplayText = "Compt. Egreso/Factura", IdValue = "E" }
-                };
-                break;
-            default:
-                ItemsTipoEgreso = new();
-                break;
-        }
-
-        if (ItemsTipoEgreso.Count > 0)
-            PreferredTipoEgreso = ItemsTipoEgreso[0].IdValue;
-    }
-
-    private async Task OnPreferredTipoEgresoChanged(string newValue)
-    {
-        PreferredTipoEgreso = newValue;
+        selectedTipo = e.Value?.ToString() ?? string.Empty;
         searchText = string.Empty;
         await LoadDataAsync();
     }
@@ -335,14 +372,13 @@
             _cts = new CancellationTokenSource();
             var ct = _cts.Token;
 
-            var urlrequest = $"v1/bodega/TipoHandHeld/{DataOrigen}";
+            var urlrequest = $"v1/bodega/TipoHandHeld/{GetDataOrigen()}";
             var response = await apiClient.GetAsync<List<CustomAttributes>>(urlrequest, ct);
 
             if (response?.succeeded ?? false)
             {
                 tiposPistoleo = response.data ?? new();
 
-                // Seleccionar el primer tipo por defecto si hay opciones
                 if (tiposPistoleo.Count > 0 && string.IsNullOrEmpty(selectedTipo))
                 {
                     selectedTipo = tiposPistoleo.First().Key;
@@ -350,14 +386,11 @@
             }
             else
             {
-                errorTipos = response?.message ?? "Error al cargar tipos de pistoleo.";
+                errorTipos = response?.message ?? "Error al cargar tipos de egreso.";
                 tiposPistoleo = new();
             }
         }
-        catch (OperationCanceledException)
-        {
-            // Ignorar cancelaciones
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             errorTipos = $"Error al cargar tipos: {ex.Message}";
@@ -370,12 +403,12 @@
         }
     }
 
-
     private async Task LoadDataAsync()
     {
         loadError = null;
         isLoading = true;
         GridData.Clear();
+        StateHasChanged();
 
         _cts?.Cancel();
         _cts?.Dispose();
@@ -391,12 +424,12 @@
                 return;
             }
 
-            var urlRequest = $"v1/bodega/OrigenMovimientoMercaderia/{DataOrigen}/{PreferredTipoEgreso}";
+            var urlRequest = $"v1/bodega/OrigenMovimientoMercaderia/{DataOrigen}/{selectedTipo}";
             var response = await apiClient.GetAsync<List<OrigenMovimiento>>(urlRequest, ct);
 
             if ((response?.succeeded ?? false) == false)
             {
-                loadError = response?.message ?? $"Error interno Seguimiento: {response?.message}";
+                loadError = response?.message ?? $"Error interno: {response?.message}";
                 return;
             }
 
@@ -428,6 +461,18 @@
         }
     }
 
+    private async Task RefreshData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        await CargarTiposPistoleoAsync();
+        await LoadDataAsync();
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
     private async Task<bool> AskBeforeLeavingAsync()
     {
         if (!datosCambiados) return false;
@@ -439,6 +484,35 @@
     {
         if (!await AskBeforeLeavingAsync()) return;
         context.PreventNavigation();
+    }
+
+    // Modal de ingreso manual
+    private void OpenManualModal()
+    {
+        manualBodega = selectedBodega;
+        manualIdentificador = string.Empty;
+        showManualModal = true;
+    }
+
+    private void CloseManualModal()
+    {
+        showManualModal = false;
+    }
+
+    private void OnManualAceptar()
+    {
+        showManualModal = false;
+        selectedIdentificadorOrigen = manualIdentificador;
+        if (selectedTipo == "CE")
+        {
+            selectedBodega = manualBodega;
+            OnAbrirClick($"{manualBodega}-{manualIdentificador}");
+        }
+        else
+        {
+            OnAbrirClick(manualIdentificador);
+        }
+
     }
 
     void OnAbrirClick(string IdentificadorOrigen)
@@ -465,215 +539,322 @@
 
     private async void AbrirComprobanteDetalle(Guid? guid = null)
     {
+        showPopup = false;
+
         if (guid == null || guid == Guid.Empty) guid = Guid.NewGuid();
 
-        await SessionStorage.SetItemAsync($"{guid}-TipoEgreso", PreferredTipoEgreso);
+        await SessionStorage.SetItemAsync($"{guid}-TipoEgreso", selectedTipo);
         await SessionStorage.SetItemAsync($"{guid}-SelectedSecuencia", selectedIdentificadorOrigen);
         Nav.NavigateTo($"/Bodega/EgresoComprobanteDetalle/{guid}", true, true);
     }
-
-    public class TipoEgresoItem
-    {
-        public string DisplayText { get; set; } = string.Empty;
-        public string IdValue { get; set; } = string.Empty;
-    }
 }
 
-
-
-
 <style>
-    /* Layout base: ocupa toda la ventana y fija header/footer */
-
-
-    .page-title {
-        margin-bottom: .5rem;
-        font-size: 1.1rem;
-        font-weight: 600;
-    }
-
-    .footer-space {
-        height: 40px; /* permanece visible abajo */
-        flex: 0 0 auto;
-    }
-
-    /* Estados */
-    .status-block {
-        padding: .75rem 1rem;
-        border-radius: 6px;
-        font-size: .9rem;
-        display: flex;
-        gap: .6rem;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        background: var(--dxbl-background, #fff);
-        box-shadow: 0 1px 3px rgba(0,0,0,.06);
-    }
-
-        .status-block.info {
-            background: #e8f4ff;
-            color: #024c7b;
-        }
-
-        .status-block.error {
-            background: #ffe8e8;
-            color: #7b0202;
-        }
-
-    .retry-btn {
-        background: #0d6efd10;
-    }
-
-    /* Header (siempre visible dentro del contenedor) */
-    .top-header {
-        z-index: 10;
-        background: var(--dxbl-background, #fff);
+    .egreso-root {
         display: flex;
         flex-direction: column;
-        gap: .75rem;
-        padding: .6rem .75rem .9rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,.08);
-        border-radius: 8px;
-        flex: 0 0 auto; /* no se estira */
-    }
-
-    .section-title {
-        font-weight: 600;
-        font-size: .9rem;
-        text-transform: uppercase;
-        letter-spacing: .5px;
-        color: #2b4b70;
-    }
-
-    .filters .filters-row {
-        display: flex;
-        gap: .6rem;
-        align-items: center;
-        flex-wrap: wrap;
-    }
-
-    .scroll-area .filters-row {
-        display: flex;
-        gap: .6rem;
-        align-items: center;
-        flex-wrap: wrap;
-        padding: .55rem;
-    }
-
-    /* RadioGroup compacto */
-    .dx-custom-radio-group {
-        padding: .15rem 0 0 0;
-    }
-
-    /* Panel de ingreso manual */
-    .manual-grid {
-        display: grid;
-        gap: .6rem;
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        align-items: end;
-    }
-
-    .manual-input {
-        min-width: 0;
-    }
-
-    .manual-actions {
-        display: flex;
-        gap: .5rem;
-        align-items: center;
-    }
-
-    /* Área central con scroll propio */
-    .scroll-area {
-        flex: 1 1 auto; /* ocupa todo el espacio disponible entre header y footer */
-        min-height: 0; /* necesario para que overflow funcione dentro de flex */
-        overflow: auto;
-        -webkit-overflow-scrolling: touch;
-        box-shadow: 0 2px 4px rgba(0,0,0,.08);
-        border-radius: 8px;
-        max-height: 60%;
-    }
-
-    /* Listado vertical en 2 columnas */
-    .items-section {
-        background: var(--dxbl-background, #fff);
-        padding: .55rem;
         min-height: 100%;
+        background: #f8fafc;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .egreso-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .header-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+        .header-title h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #000064;
+        }
+
+    .refresh-btn {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #0d6efd;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s;
+    }
+
+        .refresh-btn:hover:not(:disabled) {
+            background: rgba(91, 208, 239, 0.1);
+            border-color: #5bd0ef;
+        }
+
+        .refresh-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .refresh-btn.spinning svg {
+            animation: spin 1s linear infinite;
+        }
+
+    @@keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .egreso-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .form-label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #64748b;
+        margin-bottom: 0;
+    }
+
+    .select-row {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .input-wrapper,
+    .select-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+        flex: 1;
+    }
+
+    .form-input,
+    .form-select {
+        width: 100%;
+        padding: 0.8rem 2.5rem 0.8rem 1rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        background: #f8fafc;
+        font-size: 0.95rem;
+        color: #1e293b;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        appearance: none;
+    }
+
+        .form-input::placeholder {
+            color: #94a3b8;
+        }
+
+        .form-input:focus,
+        .form-select:focus {
+            border-color: #5bd0ef;
+            box-shadow: 0 0 0 3px rgba(91, 208, 239, 0.2);
+        }
+
+        .form-select:disabled {
+            background: #e9ecef;
+            cursor: not-allowed;
+        }
+
+    .input-icon,
+    .select-icon {
+        position: absolute;
+        right: 0.75rem;
+        color: #94a3b8;
+        pointer-events: none;
+    }
+
+    .select-spinner {
+        position: absolute;
+        right: 0.75rem;
+        width: 18px;
+        height: 18px;
+        border: 2px solid #e2e8f0;
+        border-top-color: #0d6efd;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    .add-btn {
+        width: 42px;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #0d6efd;
+        background: #0d6efd;
+        color: #fff;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.1s;
+        flex-shrink: 0;
+    }
+
+        .add-btn:hover {
+            background: #0a58ca;
+        }
+
+        .add-btn:active {
+            transform: scale(0.95);
+        }
+
+    .error-info {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.6rem;
+        border-radius: 0.5rem;
+        margin-top: 0.25rem;
+        background: rgba(220, 53, 69, 0.1);
+        color: #dc3545;
+    }
+
+    .items-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        background: #f1f5f9;
+        border-top: 1px solid #e2e8f0;
+        margin-top: 1rem;
+        border-radius: 0.75rem 0.75rem 0 0;
+    }
+
+    .items-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(8px);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+    }
+
+        .items-header h3 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+    .items-badge {
+        background: rgba(91, 208, 239, 0.15);
+        color: #5bd0ef;
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 0.3rem 0.6rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(91, 208, 239, 0.25);
+    }
+
+    .items-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.75rem 0 5rem;
     }
 
     .items-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: .6rem;
-        align-items: stretch;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.65rem;
     }
 
-    .empty-hint {
-        padding: .65rem .8rem;
-        color: #4a5568;
-        font-size: .9rem;
+    .item-card {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 1rem;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        cursor: pointer;
+        transition: box-shadow 0.2s, transform 0.15s, border-color 0.2s;
     }
 
-    .comp-card {
-        border: 1px solid #e6e9ef;
-        border-radius: 10px;
-        padding: .55rem .6rem;
-        background: #f8fafc;
+        .item-card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transform: translateY(-1px);
+            border-color: rgba(91, 208, 239, 0.4);
+        }
+
+        .item-card:active {
+            transform: translateY(0);
+        }
+
+    .item-number {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #000064;
+        transition: color 0.2s;
+    }
+
+    .item-card:hover .item-number {
+        color: #5bd0ef;
+    }
+
+    .empty-state {
         display: flex;
         flex-direction: column;
-        gap: .45rem;
-        transition: border-color .2s ease, background-color .2s ease, transform .1s ease, box-shadow .2s ease;
-        cursor: pointer;
-        outline: none;
-        min-height: 56px;
-    }
-
-        .comp-card:hover {
-            transform: translateY(-1px);
-            background: #f3f7fb;
-            box-shadow: 0 2px 6px rgba(13,110,253,.08);
-        }
-
-        .comp-card:focus-visible {
-            box-shadow: 0 0 0 2px rgba(13,110,253,.25);
-            border-color: #0d6efd;
-            background: #eef6ff;
-        }
-
-    .comp-row {
-        display: flex;
-        justify-content: space-between;
         align-items: center;
-        gap: .4rem;
-        min-width: 0;
+        justify-content: center;
+        padding: 3rem 1rem;
+        color: #94a3b8;
     }
 
-    .comp-num {
-        font-weight: 700;
-        color: #243b53;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        .empty-state p {
+            margin: 0.75rem 0 0;
+            font-size: 0.9rem;
+        }
+
+    .error-state {
+        color: #dc3545;
     }
 
-    .finalize {
-        background: #198754;
+    .loading-spinner {
+        animation: spin 1s linear infinite;
+    }
+
+    .retry-btn {
+        margin-top: 0.5rem;
+        padding: 0.45rem 0.8rem;
+        border-radius: 6px;
+        border: 1px solid #0d6efd;
+        background: #0d6efd;
         color: #fff;
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: background 0.2s;
     }
 
-    .dialog-actions {
-        display: flex;
-        gap: .6rem;
-        justify-content: flex-end;
-        align-items: center;
-    }
+        .retry-btn:hover {
+            background: #0a58ca;
+        }
 
-    /* Modal simple y responsive (igual que Resumen) */
+    /* Modal */
     .modal-backdrop {
         position: fixed;
         inset: 0;
-        background: rgba(15, 23, 42, .45);
+        background: rgba(15, 23, 42, 0.45);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -682,12 +863,12 @@
     }
 
     .modal-card {
-        width: min(520px, 96vw);
+        width: min(420px, 96vw);
         max-height: 92vh;
         background: #fff;
         color: #0f172a;
         border-radius: 12px;
-        box-shadow: 0 10px 30px rgba(0,0,0,.2);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -697,7 +878,7 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: .75rem 1rem;
+        padding: 0.75rem 1rem;
         border-bottom: 1px solid #e6e9ef;
         background: #f8fafc;
     }
@@ -726,30 +907,30 @@
         }
 
     .modal-body {
-        padding: .9rem 1rem;
+        padding: 0.9rem 1rem;
         display: flex;
         flex-direction: column;
-        gap: .7rem;
+        gap: 0.7rem;
         overflow: auto;
     }
 
     .modal-footer {
-        padding: .75rem 1rem;
+        padding: 0.75rem 1rem;
         border-top: 1px solid #e6e9ef;
         display: flex;
         justify-content: flex-end;
-        gap: .5rem;
+        gap: 0.5rem;
         background: #f8fafc;
     }
 
     .btn {
-        padding: .45rem .8rem;
+        padding: 0.45rem 0.8rem;
         border-radius: 6px;
         border: 1px solid #cfd6e4;
         background: #ffffff;
         color: #334155;
         cursor: pointer;
-        font-size: .9rem;
+        font-size: 0.9rem;
     }
 
     .btn-primary {
@@ -758,134 +939,111 @@
         color: #fff;
     }
 
+        .btn-primary:hover {
+            background: #0a58ca;
+        }
+
     .btn-secondary:hover {
         background: #eef2f7;
     }
 
-    .btn:disabled {
-        opacity: .6;
-        cursor: not-allowed;
-    }
-
-    .title-bar {
-        position: relative;
-    }
-
-        .title-bar .page-title {
-            margin-right: 44px; /* deja espacio para el botón */
+    /* Dark mode */
+    @@media (prefers-color-scheme: dark) {
+        .egreso-root {
+            background: #0d1117;
         }
 
-    .refresh-btn {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 34px;
-        height: 34px;
-        border-radius: 6px;
-        border: 1px solid #e6e9ef;
-        background: var(--dxbl-background, #fff);
-        color: #0d6efd;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: background-color .15s ease, border-color .15s ease, transform .05s ease;
-    }
-
-        .refresh-btn:hover:not(:disabled) {
-            background: #f0f6ff;
-            border-color: #bcd6ff;
+        .header-title h2 {
+            color: #5bd0ef;
         }
 
-        .refresh-btn:active:not(:disabled) {
-            transform: translateY(1px);
+        .refresh-btn {
+            background: #161b22;
+            border-color: #30363d;
         }
 
-        .refresh-btn:disabled {
-            opacity: .6;
-            cursor: default;
-        }
-
-    .refresh-icn {
-        width: 18px;
-        height: 18px;
-        display: block;
-    }
-
-    .refresh-btn.spinning .refresh-icn {
-        animation: spin 1s linear infinite;
-    }
-
-    /* Responsivo general */
-    @@media (max-width: 640px) {
-        .top-header {
-            padding: .5rem .6rem .7rem;
-        }
-
-        .manual-grid {
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        }
-
-            .manual-grid .filters-Identificador {
-                width: 100px;
-            }
-
-        .items-grid {
-            gap: .5rem;
-        }
-
-        .comp-card {
-            padding: .5rem;
-        }
-    }
-
-    /* Handheld 480x692 aprox: optimización crítica (mantener 2 columnas) */
-    @@media (max-width: 520px) {
-        .comp-num {
-            font-size: .95rem;
-        }
-
-        .items-grid {
-            gap: .5rem;
-        }
-
-        .comp-card {
-            padding: .45rem;
-            min-height: 48px;
-        }
-
-        .top-header {
-            gap: .6rem;
-        }
-    }
-
-    @@media (max-width: 520px) and (max-height: 740px) {
-        .top-header {
-            padding: .35rem .5rem .5rem;
-            gap: .45rem;
-        }
-
-        .manual-grid {
-            gap: .5rem;
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-        }
-
-        .top-header .manual-grid {
-            grid-template-columns: 1fr auto;
-            align-items: center;
+        .form-input,
+        .form-select {
+            background: #0d1117;
+            border-color: #30363d;
+            color: #f0f6fc;
         }
 
         .items-section {
-            padding: .45rem;
+            background: #0d1117;
+            border-color: #30363d;
         }
 
+        .items-header {
+            background: rgba(22, 27, 34, 0.9);
+        }
+
+            .items-header h3 {
+                color: #f0f6fc;
+            }
+
+        .item-card {
+            background: #161b22;
+            border-color: #30363d;
+        }
+
+            .item-card:hover {
+                border-color: rgba(91, 208, 239, 0.5);
+            }
+
+        .item-number {
+            color: #f0f6fc;
+        }
+
+        .item-card:hover .item-number {
+            color: #5bd0ef;
+        }
+
+        .modal-card {
+            background: #161b22;
+            color: #f0f6fc;
+        }
+
+        .modal-header,
+        .modal-footer {
+            background: #0d1117;
+            border-color: #30363d;
+        }
+
+        .modal-title {
+            color: #f0f6fc;
+        }
+
+        .modal-close {
+            color: #f0f6fc;
+        }
+
+            .modal-close:hover {
+                background: #30363d;
+            }
+
+        .btn {
+            background: #21262d;
+            border-color: #30363d;
+            color: #f0f6fc;
+        }
+
+        .btn-secondary:hover {
+            background: #30363d;
+        }
+    }
+
+    @@media (max-width: 480px) {
         .items-grid {
-            gap: .45rem;
+            gap: 0.5rem;
         }
 
-        .scroll-area {
-            max-height: 14rem;
-            margin-top: 0.3rem;
+        .item-card {
+            padding: 0.85rem;
+        }
+
+        .item-number {
+            font-size: 1rem;
         }
     }
 </style>

@@ -22,4 +22,9 @@ public class FormFactor : IFormFactor
         return DeviceInfo.Platform.ToString() + " - " + DeviceInfo.VersionString;
     }
 
+    public string GetVersion()
+    {
+        return AppInfo.Current.VersionString;
+    }
+
 }

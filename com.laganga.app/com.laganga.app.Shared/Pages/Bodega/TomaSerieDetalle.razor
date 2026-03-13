@@ -147,8 +147,37 @@ else
         <div class="series-section">
             <div class="series-header">
                 <h3>Series Cargadas</h3>
-                <span class="series-badge">@series.Count Items</span>
+                <label class="series-badge summary-toggle-label" @onclick="() => summaryExpanded = !summaryExpanded">
+                    <span>@series.Count Items</span>
+                    <svg class="summary-expand-icon @(summaryExpanded ? "expanded" : "")" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                        <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
+                    </svg>
+                </label>
             </div>
+
+            @if (summaryExpanded && series.Count > 0)
+            {
+                <div class="summary-panel">
+                    <div class="summary-grid summary-grid-header">
+                        <div class="summary-col-code">Código</div>
+                        <div class="summary-col-desc">Descripción</div>
+                        <div class="summary-col-qty">Cant. Series</div>
+                    </div>
+                    @foreach (var grupo in series.GroupBy(s => new { s.CodigoItem, s.Descripcion }))
+                    {
+                        <div class="summary-grid summary-grid-row">
+                            <div class="summary-col-code summary-code-value">@grupo.Key.CodigoItem</div>
+                            <div class="summary-col-desc summary-desc-value">@grupo.Key.Descripcion</div>
+                            <div class="summary-col-qty summary-qty-value">@grupo.Count().ToString("N2")</div>
+                        </div>
+                    }
+                    <div class="summary-total-row">
+                        <span class="summary-total-label">Total General</span>
+                        <span class="summary-total-value">@series.Count.ToString("N2")</span>
+                    </div>
+                </div>
+            }
+
 
             <div class="series-list">
                 @foreach (var item in series)
@@ -182,6 +211,7 @@ else
                     </div>
                 }
             </div>
+        
         </div>
     </div>
 }
@@ -213,6 +243,7 @@ else
     private string? loadError;
     private List<SerieMovimientoDTO> series = new();
     private bool _pendingFocusSerie;
+    private bool summaryExpanded;
 
     protected override async Task OnInitializedAsync()
     {
@@ -431,13 +462,24 @@ else
 
         if (codigoValido && !string.IsNullOrWhiteSpace(productoSeleccionado.CodigoItem) && !string.IsNullOrWhiteSpace(numeroSerie))
         {
+
+            var serieNueva = numeroSerie.Trim().ToUpperInvariant();
+
+            if (series.Any(s => s.Serie.Equals(serieNueva, StringComparison.OrdinalIgnoreCase)))
+            {
+                MostrarMensaje("La serie ya fue agregada.", false);
+                await FocusSerieCapturaAsync();
+                StateHasChanged();
+                return;
+            }
+
             var nuevaSerie = new SerieMovimientoDTO
             {
                 Guid = Guid.Parse(guid),
                 SeqCompte = "0",
                 CodigoItem = productoSeleccionado.CodigoItem.Trim().ToUpperInvariant(),
                 Descripcion = productoSeleccionado.Descripcion.Trim(),
-                Serie = numeroSerie.Trim().ToUpperInvariant()
+                Serie = serieNueva
             };
 
             var (ok, msg) = await controlSerie(nuevaSerie, "INS");
@@ -1001,4 +1043,159 @@ else
         .refresh-btn.spinning svg {
             animation: spin 1s linear infinite;
         }
+
+    /* Acordeón de resumen */
+    .summary-toggle-label {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        cursor: pointer;
+        user-select: none;
+        transition: background 0.2s;
+    }
+
+        .summary-toggle-label:hover {
+            background: rgba(91, 208, 239, 0.25);
+        }
+
+        .summary-toggle-label:active {
+            transform: scale(0.95);
+        }
+
+    .summary-expand-icon {
+        transition: transform 0.3s ease;
+    }
+
+        .summary-expand-icon.expanded {
+            transform: rotate(180deg);
+        }
+
+    .summary-panel {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        animation: summarySlideIn 0.25s ease-out;
+    }
+
+    @@keyframes summarySlideIn {
+        from {
+            opacity: 0;
+            max-height: 0;
+            margin-bottom: 0;
+        }
+
+        to {
+            opacity: 1;
+            max-height: 500px;
+            margin-bottom: 0.75rem;
+        }
+    }
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: 1fr 2fr 1fr;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .summary-grid-header {
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .summary-grid-row {
+        font-size: 0.7rem;
+        padding: 0.3rem 0;
+    }
+
+    .summary-col-qty {
+        text-align: right;
+    }
+
+    .summary-code-value {
+        font-weight: 600;
+        color: #000064;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding-right: 0.25rem;
+    }
+
+    .summary-desc-value {
+        color: #64748b;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding-right: 0.25rem;
+    }
+
+    .summary-qty-value {
+        text-align: right;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .summary-total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0.25rem 0;
+        margin-top: 0.25rem;
+        border-top: 1px solid #e2e8f0;
+    }
+
+    .summary-total-label {
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+    }
+
+    .summary-total-value {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #000064;
+    }
+
+    /* Dark mode para resumen */
+    @@media (prefers-color-scheme: dark) {
+        .summary-panel {
+            background: #161b22;
+            border-color: #30363d;
+        }
+
+        .summary-grid-header {
+            border-color: #30363d;
+        }
+
+        .summary-code-value {
+            color: #5bd0ef;
+        }
+
+        .summary-desc-value {
+            color: #8b949e;
+        }
+
+        .summary-qty-value {
+            color: #f0f6fc;
+        }
+
+        .summary-total-row {
+            border-color: #30363d;
+        }
+
+        .summary-total-value {
+            color: #5bd0ef;
+        }
+    }
 </style>

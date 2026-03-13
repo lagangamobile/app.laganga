@@ -1,38 +1,37 @@
 ﻿@inherits LayoutComponentBase
-@using System.Collections.Generic;
-@using DevExpress.Blazor.Internal;
+@using System.Collections.Generic
 @inject com.laganga.app.Shared.Services.LayoutService LayoutService
 
 <div class="card no-border layout-root">
     <div class="card-header no-border p-2 bg-ganga">
-        <DxToolbar>
-            <Items>
-                <DxToolbarItem Alignment="ToolbarItemAlignment.Right"
-                               Attributes="@(GetToolbarButtonAttributes(LayoutService.IsDrawerOpen, "Menú"))"
-                               BeginGroup="true"
-                               Click="ToggleInfo"
-                               CssClass="demo-drawer-toggle-button">
-                    <Template>
-                        <div class="@($"header__burger {(LayoutService.IsDrawerOpen ? "active" : "")}")"><i></i><i></i><i></i></div>
-                    </Template>
-                </DxToolbarItem>
-            </Items>
-        </DxToolbar>
+        <div class="toolbar-container">
+            <button type="button"
+                    class="drawer-toggle-btn"
+                    aria-label="@(LayoutService.IsDrawerOpen ? "Cerrar Menú Drawer" : "Abrir Menú Drawer")"
+                    aria-pressed="@LayoutService.IsDrawerOpen.ToString()"
+                    @onclick="ToggleInfo">
+                <div class="@($"header__burger {(LayoutService.IsDrawerOpen ? "active" : "")}")">
+                    <i></i><i></i><i></i>
+                </div>
+            </button>
+        </div>
     </div>
 
     <div class="card-body p-0 bg-ganga">
-        <DxDrawer @bind-IsOpen="LayoutService.IsDrawerOpen"
-                  Mode="DrawerMode.Overlap"
-                  Position="DrawerPosition.Right"
-                  PanelWidth="225px"
-                  aria-label="Main Menu Drawer"
-                  CssClass="full-height-drawer">
+        <div class="drawer-wrapper">
+            @* Overlay *@
+            @if (LayoutService.IsDrawerOpen)
+            {
+                <div class="drawer-overlay" @onclick="CloseInfo"></div>
+            }
 
-            <BodyTemplate>
+            @* Panel del drawer *@
+            <div class="drawer-panel @(LayoutService.IsDrawerOpen ? "open" : "")">
                 <NavMenu OnNavigate="CloseInfo" />
-            </BodyTemplate>
+            </div>
 
-            <TargetContent>
+            @* Contenido principal *@
+            <div class="drawer-content">
                 <div class="page page-content-wrapper">
                     <main class="main-wrapper">
                         <article class="content px-4 scroll-content page-custom-radius-bg">
@@ -47,9 +46,8 @@
                     <a href="." class="reload">Reload</a>
                     <span class="dismiss">🗙</span>
                 </div>
-            </TargetContent>
-
-        </DxDrawer>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -68,16 +66,6 @@
 
     void CloseInfo() => LayoutService.CloseDrawer();
 
-    public static Dictionary<string, object> GetToolbarButtonAttributes(bool isOpen, string drawerName = null)
-    {
-        if (!string.IsNullOrEmpty(drawerName))
-            drawerName += " ";
-        return new Dictionary<string, object> {
-            { A11yAriaAttributeUtils.AriaLabel, isOpen ? $"Cerrar {drawerName}Drawer" : $"Abrir {drawerName}Drawer" },
-            { A11yAriaAttributeUtils.AriaPressed, isOpen.ToString() }
-        };
-    }
-
     public void Dispose()
     {
         LayoutService.DrawerStateChanged -= OnDrawerStateChanged;
@@ -85,43 +73,115 @@
 }
 
 <style>
+
+    :root {
+        --color-primary: #000064;
+        --color-secondary: #5bd0ef;
+        --bg-light: #f8fafc;
+        --bg-dark: #0d1117;
+        --drawer-width: 225px;
+    }
+
     .bg-ganga {
-        background: #000064;
+        background: var(--color-primary);
     }
 
     .page-custom-radius-bg {
         border-radius: 15px 15px 0px 0px;
-        background: #fff;
+        background: var(--bg-light);
+    }
+
+    @@media (prefers-color-scheme: dark) {
+        .page-custom-radius-bg {
+            background: var(--bg-dark);
+        }
     }
 
     .layout-root {
         height: 100vh;
         display: flex;
         flex-direction: column;
-        /* Se eliminó overflow-hidden para permitir scroll interno */
     }
 
         .layout-root > .card-body {
             flex: 1;
             display: flex;
-            /* Quitar overflow:hidden y permitir que el hijo maneje el scroll */
-            min-height: 0; /* Necesario para que el contenido flex pueda hacer scroll */
+            min-height: 0;
         }
 
-    .full-height-drawer,
-    .full-height-drawer .dxbl-drawer-wrapper,
-    .full-height-drawer .dxbl-drawer-target,
-    .full-height-drawer .dxbl-drawer-panel {
-        height: 100%;
-        max-height: 100%;
-        min-height: 0;
+    /* Toolbar */
+    .toolbar-container {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        padding: 0;
     }
 
-    .dxbl-drawer-target-content {
+    .drawer-toggle-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 0.3rem;
+        outline: none;
+    }
+
+        .drawer-toggle-btn:focus-visible {
+            outline: 2px solid var(--color-secondary);
+            outline-offset: 2px;
+            border-radius: 4px;
+        }
+
+    /* Drawer wrapper */
+    .drawer-wrapper {
+        display: flex;
+        width: 100%;
         height: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Overlay */
+    .drawer-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.35);
+        z-index: 50;
+        transition: opacity 0.3s ease;
+    }
+
+    /* Drawer panel */
+    .drawer-panel {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: var(--drawer-width);
+        background: var(--bg-light);
+        z-index: 60;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        overflow-y: auto;
+        box-shadow: -4px 0 16px rgba(0, 0, 0, 0.15);
+    }
+
+        .drawer-panel.open {
+            transform: translateX(0);
+        }
+
+    @@media (prefers-color-scheme: dark) {
+        .drawer-panel {
+            background: #161b22;
+            box-shadow: -4px 0 16px rgba(0, 0, 0, 0.4);
+        }
+    }
+
+    /* Drawer content */
+    .drawer-content {
+        flex: 1;
         display: flex;
         flex-direction: column;
         min-height: 0;
+        height: 100%;
     }
 
     .page-content-wrapper,
@@ -137,7 +197,6 @@
         min-height: 0;
     }
 
-    /* Área que realmente scrolla */
     .scroll-content {
         flex: 1;
         min-height: 0;
@@ -146,46 +205,14 @@
         overscroll-behavior: contain;
     }
 
-    /* Opcional: limitar máximo ancho en dispositivos handheld si se desea */
     @@media (max-width: 600px) {
-        .scroll-content
-
-    {
-        padding-left: 1rem;
-        padding-right: 1rem;
+        .scroll-content {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
     }
 
-    }
-
-    .dxbl-drawer-content:has(.demo-drawer-overview-right) {
-        padding: 0;
-    }
-
-    .demo-drawer-overview-right .dxbl-drawer-header,
-    .demo-drawer-overview-right .dxbl-drawer-body,
-    .demo-drawer-overview-right .dxbl-drawer-footer {
-        width: 225px;
-    }
-
-    .demo-drawer .dxbl-drawer-content {
-        font-size: var(--dxbl-drawer-panel-font-size);
-        line-height: var(--dxbl-drawer-panel-line-height);
-        overflow: auto;
-        padding: var(--dxbl-drawer-panel-padding-y) var(--dxbl-drawer-panel-padding-x);
-    }
-
-    .demo-drawer:has(.demo-drawer-menu) {
-        --dxbl-drawer-panel-body-padding-x: 0;
-        --dxbl-drawer-panel-body-padding-y: 0;
-    }
-
-    .dxbl-menu.demo-drawer-menu {
-        --dxbl-menu-top-left-border-radius: 0;
-        --dxbl-menu-top-right-border-radius: 0;
-        --dxbl-menu-bottom-left-border-radius: 0;
-        --dxbl-menu-bottom-right-border-radius: 0;
-    }
-
+    /* Burger icon */
     .header__burger {
         display: flex;
         flex-direction: column;
@@ -216,21 +243,6 @@
         .header__burger.active i:nth-child(3) {
             transform: rotate(-45deg) translate(4px, -5px);
         }
-
-    .dxbl-toolbar .dxbl-btn:focus,
-    .dxbl-toolbar .dxbl-btn:focus-visible {
-        outline: none;
-        box-shadow: none;
-    }
-
-    .dxbl-toolbar .dxbl-btn:focus-visible {
-        outline: none;
-        outline-offset: 2px;
-    }
-
-    .dxbl-toolbar .dxbl-btn[data-pointer="true"]:focus-visible {
-        outline: none;
-    }
 
     .no-border {
         border: 0 !important;
