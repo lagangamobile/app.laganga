@@ -1,7 +1,6 @@
 ﻿@page "/bodega/toma-serie-detalle/{guid}"
 @using com.laganga.app.Shared.Models
 @using com.laganga.app.Shared.Services
-@using DevExpress.Blazor
 @using Microsoft.AspNetCore.Components.Web
 @inject IJSRuntime JS
 @inject NavigationManager Nav
@@ -32,10 +31,7 @@ else if (!string.IsNullOrEmpty(loadError))
         </div>
         <div class="status-block error">
             @loadError
-            <DxButton Text="Reintentar"
-                      ButtonType="ButtonType.Normal"
-                      CssClass="retry-btn"
-                      Click="LoadDataAsync" />
+            <button type="button" class="btn retry-btn" @onclick="LoadDataAsync">Reintentar</button>
         </div>
     </div>
 }
@@ -137,11 +133,7 @@ else
                 </div>
             </div>
 
-            <DxButton Text="Agregar Serie"
-                      IconCssClass="btn-icon-add"
-                      CssClass="btn-agregar"
-                      Enabled="@(codigoValido && !string.IsNullOrWhiteSpace(numeroSerie))"
-                      Click="AgregarSerie" />
+            <button type="button" class="btn btn-agregar" disabled="@(!codigoValido || string.IsNullOrWhiteSpace(numeroSerie))" @onclick="AgregarSerie">Agregar Serie</button>
         </div>
 
         <div class="series-section">

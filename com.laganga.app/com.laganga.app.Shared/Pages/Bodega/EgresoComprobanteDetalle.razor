@@ -2,7 +2,6 @@
 @using System.Net.Http.Json
 @using com.laganga.app.Shared.Models
 @using com.laganga.app.Shared.Services
-@using DevExpress.Blazor
 @inject NavigationManager Nav
 @inject IAuthenticationService AuthService
 @inject IApiGangaClient apiClient
@@ -23,10 +22,7 @@ else if (!string.IsNullOrEmpty(loadError))
     <div class="status-block error">
         @loadError
 
-        <DxButton Text="Reintentar"
-                  ButtonType="ButtonType.Normal"
-                  CssClass="retry-btn"
-                  Click="LoadDataAsync" />
+        <button type="button" class="btn retry-btn" @onclick="LoadDataAsync">Reintentar</button>
     </div>
 }
 else if (item == null)
@@ -69,26 +65,19 @@ else
                 </div>
             </div>
             <div class="actions-inline">
-                <DxButton Text="Regresar"
-                          ButtonType="ButtonType.Normal"
-                          Click='() => Nav.NavigateTo("/Bodega/EgresoComprobante", true)' />
-                <DxButton Text="Finalizar"
-                          CssClass="@( CanFinalize() ? "finalize" : "" )"
-                          Enabled="@CanFinalize()"
-                          Click="() => showFinalizeConfirm = true" />
+                <button type="button" class="btn btn-secondary" @onclick='() => Nav.NavigateTo("/Bodega/EgresoComprobante", true)'>Regresar</button>
+                <button type="button" class="btn @(CanFinalize() ? "finalize" : "")" disabled="@(!CanFinalize())" @onclick="() => showFinalizeConfirm = true">Finalizar</button>
             </div>
         </div>
 
         <div class="comprobantes-wrapper">
             <div class="filters-row">
-                <DxTextBox LabelText="Buscar"
-                           @bind-Text="searchCompteText"
-                           BindValueMode="BindValueMode.OnInput"
-                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                           NullText="Buscar por #, bodega o destinatario"
-                           SizeMode="SizeMode.Small"
-                           aria-label="Buscar comprobante"
-                           CssClass="manual-input" />
+                <input type="text"
+                       class="form-control form-control-sm manual-input"
+                       placeholder="Buscar por #, bodega o destinatario"
+                       aria-label="Buscar comprobante"
+                       @bind="searchCompteText"
+                       @bind:event="oninput" />
             </div>
             <div class="comprobantes-strip" role="tablist" aria-label="Comprobantes">
                 @foreach (var key in FilteredGroupKeys)
@@ -135,24 +124,27 @@ else
                     Detalles del comprobante (@(compSel.Detalles?.Sum(d => d.CantidadIngresada) ?? 0)/@(compSel.Detalles?.Sum(d => d.Cantidad) ?? 0))
                 </summary>
                 <div class="accordion-content">
-                    <DxGrid Data="compSel.Detalles"
-                            T="DetalleMovimiento"
-                            ShowFilterRow="false"
-                            ShowGroupPanel="false"
-                            ShowPager="false"
-                            KeyboardNavigationEnabled="true"
-                            RowClick="OnDetalleRowClick"
-                            CssClass="detalles-grid"
-                            ColumnResizeMode="GridColumnResizeMode.Disabled"
-                            SizeMode="SizeMode.Small"
-                            PageSize="5">
-                        <Columns>
-                            <DxGridDataColumn FieldName="@nameof(DetalleMovimiento.CodigoItem)" Caption="Artículo" Width="85px" />
-                            <DxGridDataColumn FieldName="@nameof(DetalleMovimiento.Descripcion)" Caption="Descripción" />
-                            <DxGridDataColumn FieldName="@nameof(DetalleMovimiento.Cantidad)" Caption="Cant" Width="40px" />
-                            <DxGridDataColumn FieldName="@nameof(DetalleMovimiento.CantidadIngresada)" Caption="Ing" Width="40px" />
-                        </Columns>
-                    </DxGrid>
+                    <table class="table table-sm detalles-grid">
+                        <thead>
+                            <tr>
+                                <th style="width:85px">Artículo</th>
+                                <th>Descripción</th>
+                                <th style="width:40px">Cant</th>
+                                <th style="width:40px">Ing</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var d in compSel.Detalles ?? Enumerable.Empty<DetalleMovimiento>())
+                            {
+                                <tr class="@(d == selectedDetalle ? "table-active" : "")" @onclick="() => OnDetalleRowClick(d)" style="cursor:pointer">
+                                    <td>@d.CodigoItem</td>
+                                    <td>@d.Descripcion</td>
+                                    <td>@d.Cantidad</td>
+                                    <td>@d.CantidadIngresada</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
                 </div>
             </details>
         }
@@ -160,20 +152,17 @@ else
         <div class="capture-panel">
             <div class="section-title">Captura</div>
             <div class="responsive-grid">
-                <DxTextBox LabelText="Código"
-                           Id="txtCodigoCaptura"
-                           CssClass="@(codigoValido ? "valid" : null)"
-                           ValidationEnabled="true"
-                           ShowValidationSuccessState="@codigoValido"
+                <div class="field-group">
+                    <label for="txtCodigoCaptura" class="form-label form-label-sm">Código</label>
+                    <input type="text"
+                           id="txtCodigoCaptura"
+                           class="form-control form-control-sm @(codigoValido ? "is-valid" : "")"
+                           placeholder="Escanear / escribir código"
                            @ref="txtCodigoCapturaRef"
-                           @bind-Text="codigoItemIngresado"
-                           InputType="InputType.Text"
-                           SizeMode="SizeMode.Small"
-                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                           ReadOnly="false"
-                           @onkeydown="HandleCodigoItemCaptura"
-                           NullText="Escanear / escribir código">
-                </DxTextBox>
+                           @bind="codigoItemIngresado"
+                           @bind:event="oninput"
+                           @onkeydown="HandleCodigoItemCaptura" />
+                </div>
 
                 <div class="field-compact" style='@(!codigoValido ? "display: none;" : "")'>
                     <div class="chip article-chip" title="@articuloDescripcion">
@@ -181,25 +170,22 @@ else
                     </div>
                 </div>
 
-                <DxTextBox LabelText="Serie"
-                           Id="txtSerieCaptura"
+                <div class="field-group">
+                    <label for="txtSerieCaptura" class="form-label form-label-sm">Serie</label>
+                    <input type="text"
+                           id="txtSerieCaptura"
+                           class="form-control form-control-sm"
+                           placeholder="Escanear serie"
                            @ref="txtSerieCapturaRef"
-                           @bind-Text="serieIngresada"
-                           InputType="InputType.Text"
-                           SizeMode="SizeMode.Small"
-                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                           ReadOnly="false"
-                           NullText="Escanear serie"
+                           @bind="serieIngresada"
+                           @bind:event="oninput"
                            @onkeydown="HandleSerieCaptura" />
+                </div>
             </div>
 
             <div class="capture-actions">
-                <DxButton Text="Ingresar Serie"
-                          Enabled="@(selectedDetalle != null && !string.IsNullOrWhiteSpace(serieIngresada))"
-                          Click="IngresarSerie" />
-                <DxButton Text="Limpiar"
-                          ButtonType="ButtonType.Normal"
-                          Click="ResetCapturaActual" />
+                <button type="button" class="btn btn-primary btn-sm" disabled="@(selectedDetalle == null || string.IsNullOrWhiteSpace(serieIngresada))" @onclick="IngresarSerie">Ingresar Serie</button>
+                <button type="button" class="btn btn-secondary btn-sm" @onclick="ResetCapturaActual">Limpiar</button>
             </div>
 
             @if (!string.IsNullOrEmpty(productoNoEncontradoMessage))
@@ -274,8 +260,8 @@ else
     private string tipoEgreso { get; set; } = string.Empty;
     private string IdentificadorOrigen { get; set; } = string.Empty;
 
-    private DxTextBox? txtCodigoCapturaRef;
-    private DxTextBox? txtSerieCapturaRef;
+    private ElementReference txtCodigoCapturaRef;
+    private ElementReference txtSerieCapturaRef;
 
     private bool _pendingInitialFocus;
     private string? _pendingScrollCompteKey;
@@ -511,7 +497,7 @@ else
     }
 
 
-    private void OnDetalleRowClick(GridRowClickEventArgs args)
+    private void OnDetalleRowClick(DetalleMovimiento detalle)
     {
     }
 
@@ -750,10 +736,7 @@ else
     {
         try
         {
-            if (txtCodigoCapturaRef is not null)
-                await txtCodigoCapturaRef.FocusAsync();
-            else
-                await JS.InvokeVoidAsync("focusElementById", "txtCodigoCaptura");
+            await JS.InvokeVoidAsync("focusElementById", "txtCodigoCaptura");
         }
         catch { }
     }
@@ -768,10 +751,7 @@ else
         {
             try
             {
-                if (txtSerieCapturaRef is not null)
-                    await txtSerieCapturaRef.FocusAsync();
-                else
-                    await JS.InvokeVoidAsync("focusElementById", "txtSerieCaptura");
+                await JS.InvokeVoidAsync("focusElementById", "txtSerieCaptura");
             }
             catch { }
         }
