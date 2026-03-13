@@ -14,7 +14,7 @@ public static partial class AppExtensions
 
     public static IServiceCollection AddApplicationShared(this IServiceCollection services)
     {
-
+        services.AddAuthorizationCore();
 
         services.AddTransient<TokenAuthorizationMessageHandler>();
         services.AddTransient<ResilientApiHandler>();
