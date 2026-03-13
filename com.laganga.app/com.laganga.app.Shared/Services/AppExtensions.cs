@@ -1,4 +1,5 @@
 ﻿using Blazored.SessionStorage;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
 using Duende.IdentityModel.OidcClient;
 using Microsoft.Extensions.Logging;
@@ -13,12 +14,6 @@ public static partial class AppExtensions
 
     public static IServiceCollection AddApplicationShared(this IServiceCollection services)
     {
-        services.AddDevExpressBlazor(options =>
-        {
-            options.BootstrapVersion = DevExpress.Blazor.BootstrapVersion.v5;
-            options.SizeMode = DevExpress.Blazor.SizeMode.Medium;
-            
-        });
 
 
         services.AddTransient<TokenAuthorizationMessageHandler>();
@@ -79,6 +74,7 @@ public static partial class AppExtensions
         services.AddSingleton<ParameterService>();
         services.AddSingleton<NetworkStatusService>();
         services.AddSingleton<IAuthenticationService, AuthenticationService>();
+        services.AddScoped<AuthenticationStateProvider, GangaAuthenticationStateProvider>();
 
         services.AddBlazoredSessionStorage();
 

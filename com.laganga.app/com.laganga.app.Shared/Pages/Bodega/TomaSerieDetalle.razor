@@ -247,13 +247,6 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (!AuthService.IsAuthenticated)
-        {
-            loadError = "Sesión no autenticada.";
-            isLoading = false;
-            return;
-        }
-
         tipoOrigen = await SessionStorage.GetItemAsync<string>($"{guid}-Tipo");
         IdentificadorOrigen = await SessionStorage.GetItemAsync<string>($"{guid}-Secuencia");
 
@@ -294,13 +287,6 @@ else
             isLoading = true;
             loadError = null;
             LimpiarMensajeOperacion();
-
-            if (!AuthService.IsAuthenticated)
-            {
-                loadError = "Sesión no autenticada.";
-                Nav.NavigateTo("/loginU", replace: true);
-                return;
-            }
 
             _cts?.Cancel();
             _cts?.Dispose();
