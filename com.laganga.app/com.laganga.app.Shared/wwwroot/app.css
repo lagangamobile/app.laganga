@@ -1,5 +1,13 @@
+/* ── Theme Variables ── */
+:root {
+    --color-primary: #000064;
+    --color-secondary: #5bd0ef;
+    --bg-light: #f8fafc;
+    --bg-dark: #0d1117;
+}
+
 html, body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 a, .btn-link {
@@ -13,7 +21,7 @@ a, .btn-link {
 }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
 }
 
 .content {
@@ -48,4 +56,319 @@ h1:focus {
 
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
+}
+
+/* ── Status Blocks (shared across Bodega pages) ── */
+.status-block {
+    padding: .75rem 1rem;
+    border-radius: .5rem;
+    font-size: .85rem;
+    margin-bottom: .75rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-wrap: wrap;
+}
+
+.status-block.info {
+    background: #e0f2fe;
+    color: #075985;
+}
+
+.status-block.error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.status-block.warn {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-block.success {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+/* ── Connectivity Banner ── */
+.conn-banner {
+    padding: .5rem .75rem;
+    font-size: .8rem;
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.conn-banner.offline {
+    background: #842029;
+    color: #fff;
+}
+
+.conn-banner.degraded {
+    background: #664d03;
+    color: #fff;
+}
+
+/* ── Shared Animations ── */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ── Refresh Button (shared) ── */
+.refresh-btn {
+    background: none;
+    border: 1px solid #d1d5db;
+    border-radius: .5rem;
+    padding: .35rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #374151;
+    transition: border-color .2s, color .2s;
+}
+
+.refresh-btn:hover {
+    border-color: var(--color-secondary);
+    color: var(--color-secondary);
+}
+
+.refresh-btn.spinning svg {
+    animation: spin 1s linear infinite;
+}
+
+/* ── Modal Shared Styles ── */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    padding: 1rem;
+}
+
+.modal-card {
+    background: #fff;
+    border-radius: .75rem;
+    width: 100%;
+    max-width: 480px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .15);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: #6b7280;
+    cursor: pointer;
+}
+
+.modal-body {
+    padding: 1.25rem;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+    padding: .75rem 1.25rem;
+    border-top: 1px solid #e5e7eb;
+}
+
+.modal-error {
+    background: #fee2e2;
+    color: #991b1b;
+    padding: .5rem .75rem;
+    border-radius: .375rem;
+    font-size: .8rem;
+    margin-top: .75rem;
+}
+
+/* ── Chip Shared Styles ── */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .25rem .6rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.chip .chip-label {
+    font-weight: 600;
+    opacity: .7;
+}
+
+.chip .chip-value {
+    font-weight: 500;
+}
+
+.chip-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: .9rem;
+    line-height: 1;
+    color: inherit;
+    opacity: .6;
+    padding: 0 .15rem;
+}
+
+.chip-remove:hover {
+    opacity: 1;
+}
+
+/* ── Progress Bar (shared) ── */
+.progress-box {
+    flex: 1;
+    min-width: 0;
+}
+
+.progress-info {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    font-size: .8rem;
+    margin-bottom: .25rem;
+    flex-wrap: wrap;
+}
+
+.progress-bar-outer {
+    height: 6px;
+    background: #e5e7eb;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-bar-inner {
+    height: 100%;
+    background: var(--color-secondary);
+    border-radius: 3px;
+    transition: width .3s ease;
+}
+
+/* ── Form Elements (shared across Bodega) ── */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-label {
+    display: block;
+    font-size: .75rem;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: .25rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.form-input {
+    width: 100%;
+    padding: .5rem .75rem;
+    border: 1px solid #d1d5db;
+    border-radius: .5rem;
+    font-size: .9rem;
+    transition: border-color .2s, box-shadow .2s;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--color-secondary);
+    box-shadow: 0 0 0 3px rgba(91, 208, 239, .2);
+}
+
+.form-input.valid {
+    border-color: #22c55e;
+}
+
+.form-input.invalid {
+    border-color: #ef4444;
+}
+
+.input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.input-wrapper .form-input {
+    padding-right: 5rem;
+}
+
+/* ── Page Title ── */
+.page-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--color-primary);
+    margin: 0 0 .75rem;
+}
+
+/* ── Small / Muted helpers ── */
+.small { font-size: .75rem; }
+.muted { opacity: .6; }
+
+/* ── Retry Button ── */
+.retry-btn {
+    margin-left: .5rem;
+    font-size: .8rem;
+}
+
+/* ── Dark mode overrides ── */
+@media (prefers-color-scheme: dark) {
+    .modal-card {
+        background: #1f2937;
+        color: #f9fafb;
+    }
+
+    .modal-header {
+        border-bottom-color: #374151;
+    }
+
+    .modal-footer {
+        border-top-color: #374151;
+    }
+
+    .status-block.info {
+        background: #1e3a5f;
+        color: #bae6fd;
+    }
+
+    .status-block.error {
+        background: #450a0a;
+        color: #fecaca;
+    }
+
+    .status-block.warn {
+        background: #451a03;
+        color: #fde68a;
+    }
+
+    .conn-banner.offline {
+        background: #7f1d1d;
+    }
+
+    .conn-banner.degraded {
+        background: #78350f;
+    }
 }
