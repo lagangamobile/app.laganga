@@ -1,15 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="DevExpress.Blazor.Themes" Version="25.1.5" />
-    <PackageReference Include="DevExpress.Blazor.Themes.Fluent" Version="25.1.5" />
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\com.laganga.app.Shared\com.laganga.app.Shared.csproj" />
