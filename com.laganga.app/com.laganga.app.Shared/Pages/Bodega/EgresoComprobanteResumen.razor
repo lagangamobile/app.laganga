@@ -2,7 +2,6 @@
 @using System.Net.Http.Json
 @using com.laganga.app.Shared.Models
 @using com.laganga.app.Shared.Services
-@using DevExpress.Blazor
 @inject NavigationManager Nav
 @inject IAuthenticationService AuthService
 @inject IApiGangaClient apiClient
@@ -50,15 +49,9 @@ else
 
 
                 <div class="actions-inline">
-                    <DxButton Text="Regresar"
-                              ButtonType="ButtonType.Normal"
-                              Click='() => Nav.NavigateTo($"/Bodega/EgresoComprobanteDetalle/{guid}", true)' />
+                    <button type="button" class="btn btn-secondary" @onclick='() => Nav.NavigateTo($"/Bodega/EgresoComprobanteDetalle/{guid}", true)'>Regresar</button>
 
-                    <DxButton Text="Finalizar"
-                              ButtonType="ButtonType.Success"
-                              CssClass="btn-success"
-                              Enabled="@(!isProcessing)"
-                              Click="OpenFinalizeModal" />
+                    <button type="button" class="btn btn-success" disabled="@isProcessing" @onclick="OpenFinalizeModal">Finalizar</button>
                 </div>
             </div>
             @if (!string.IsNullOrWhiteSpace(plateError))
