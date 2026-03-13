@@ -86,7 +86,6 @@
     public string Title { get; set; }
 
     private bool _isHome;
-    private IDisposable? _locReg;
 
     protected override void OnInitialized()
     {
@@ -123,7 +122,6 @@
         LayoutService.DrawerStateChanged -= OnDrawerStateChanged;
         LayoutService.StateChanged -= OnLayoutStateChanged;
         NavigationManager.LocationChanged -= OnLocationChanged;
-        _locReg?.Dispose();
     }
 }
 
