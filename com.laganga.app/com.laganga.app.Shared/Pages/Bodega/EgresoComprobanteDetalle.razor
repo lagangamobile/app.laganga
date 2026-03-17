@@ -933,7 +933,8 @@
         display: flex;
         flex-direction: column;
         min-height: 100%;
-        max-width: 100vw;
+        width: 100%;
+        max-width: 100%;
         min-width: 0;
         background: var(--dxbl-background, #f8fafc);
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -1092,14 +1093,16 @@
         position: sticky;
         top: -1.25rem;
         z-index: 9;
-        overflow: hidden;
         background: var(--dxbl-background, #fff);
         border-radius: 10px;
         box-shadow: 0 1px 3px rgba(0,0,0,.06);
         border: 1px solid #e6e9ef;
+        overflow: hidden;
+        /* LA SOLUCIÓN: Esto fuerza un límite físico estricto de ancho */
         width: 100%;
-        max-width: 100%;
-        min-width: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        padding: .5rem .5rem 0 .5rem;
     }
 
         .comprobantes-wrapper .filters-row {
@@ -1107,7 +1110,6 @@
             gap: .6rem;
             align-items: center;
             flex-wrap: wrap;
-            padding: .5rem .5rem 0 .5rem;
         }
 
     .manual-input {
@@ -1124,11 +1126,11 @@
         touch-action: pan-x;
         scroll-snap-type: x proximity;
         padding: .5rem;
+        /* Ahora se adapta al límite estricto del grid y vuelve a hacer scroll */
         width: 100%;
-        max-width: 100%;
         min-width: 0;
-        scrollbar-width: none;          /* Firefox */
-        -ms-overflow-style: none;       /* IE / Edge */
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE / Edge */
     }
 
     .comprobantes-strip::-webkit-scrollbar {
