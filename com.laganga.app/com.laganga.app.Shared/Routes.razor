@@ -1,14 +1,13 @@
 ﻿@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Authorization
 @using com.laganga.app.Shared.Services
 @inject IAuthenticationService AuthService
 @inject NavigationManager NavigationManager
 @inject LayoutService LayoutService
-@DxResourceManager.RegisterTheme(Themes.Fluent)
 @implements IDisposable
 
 @if (!_isReady)
 {
-    <!-- Pantalla de carga mientras se inicializa la autenticación -->
     <div class="auth-loading-screen">
         <div class="auth-loading-content">
             <div class="auth-loader-ring"></div>
@@ -17,18 +16,24 @@
 }
 else
 {
-    <Router AppAssembly="typeof(Layout.MainLayout).Assembly">
-        <Found Context="routeData">
-            <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-            <FocusOnNavigate RouteData="routeData" Selector="h1" />
-        </Found>
-        <NotFound>
-            <PageTitle>Not found</PageTitle>
-            <LayoutView Layout="@typeof(Layout.MainLayout)">
-                <p role="alert">Sorry, there's nothing at this address.</p>
-            </LayoutView>
-        </NotFound>
-    </Router>
+    <CascadingAuthenticationState>
+        <Router AppAssembly="typeof(Layout.MainLayout).Assembly">
+            <Found Context="routeData">
+                <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
+                    <NotAuthorized>
+                        <com.laganga.app.Shared.Pages.LoginU />
+                    </NotAuthorized>
+                </AuthorizeRouteView>
+                <FocusOnNavigate RouteData="routeData" Selector="h1" />
+            </Found>
+            <NotFound>
+                <PageTitle>Not found</PageTitle>
+                <LayoutView Layout="@typeof(Layout.MainLayout)">
+                    <p role="alert">Sorry, there's nothing at this address.</p>
+                </LayoutView>
+            </NotFound>
+        </Router>
+    </CascadingAuthenticationState>
 }
 
 <style>
@@ -74,16 +79,13 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        // Esperar a que el servicio de autenticación termine de inicializarse
         await AuthService.WaitForInitializationAsync();
         
         _isReady = true;
         
-        // Registrar handlers después de la inicialización
         _navReg = NavigationManager.RegisterLocationChangingHandler(OnLocationChanging);
         AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
         
-        // Realizar la redirección inicial basada en el estado de autenticación
         HandleAuthenticationRedirect();
     }
 
