@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-// Add shared services including DevExpress
+// Add shared services
 builder.Services.AddApplicationShared();
 
 // Add device-specific services used by the com.laganga.app.Shared project

@@ -5,10 +5,24 @@ namespace com.laganga.app.Shared.Services;
 public class LayoutService
 {
     public event Action? DrawerStateChanged;
+    public event Action? StateChanged;
     private bool _isDrawerOpen;
-    
-    public string Title { get; set; } = "";
-    
+    private string _title = "";
+
+    private string? _menuRootRoute;
+
+    public string Title
+    {
+        get => _title;
+        set
+        {
+            if (_title == value)
+                return;
+            _title = value;
+            StateChanged?.Invoke();
+        }
+    }
+
     public bool IsDrawerOpen
     {
         get => _isDrawerOpen;
@@ -22,8 +36,41 @@ public class LayoutService
     }
 
     public void ToggleDrawer() => IsDrawerOpen = !IsDrawerOpen;
-
     public void OpenDrawer() => IsDrawerOpen = true;
-
     public void CloseDrawer() => IsDrawerOpen = false;
+
+    public void MarkMenuNavigation(string? route)
+    {
+        _menuRootRoute = Normalize(route);
+    }
+
+    public bool ShouldBackToHome(string? currentRoute)
+    {
+        var current = Normalize(currentRoute);
+        if (string.IsNullOrEmpty(_menuRootRoute) || string.IsNullOrEmpty(current))
+            return false;
+
+        return string.Equals(current, _menuRootRoute, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void ClearMenuNavigationMark()
+    {
+        _menuRootRoute = null;
+    }
+
+    private static string Normalize(string? route)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+            return string.Empty;
+
+        var clean = route.Trim();
+
+        var q = clean.IndexOf('?');
+        if (q >= 0) clean = clean[..q];
+
+        var h = clean.IndexOf('#');
+        if (h >= 0) clean = clean[..h];
+
+        return clean.Trim('/').Trim();
+    }
 }

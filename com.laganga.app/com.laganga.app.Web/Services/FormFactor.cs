@@ -18,5 +18,10 @@ namespace com.laganga.app.Web.Services
         {
             return default!;
         }
+
+        public string GetVersion()
+        {
+            throw new NotImplementedException();
+        }
     }
 }

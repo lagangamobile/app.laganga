@@ -95,3 +95,50 @@ main {
         right: 0.75rem;
         top: 0.5rem;
     }
+
+.custom-error-boundary {
+    background: #ffeeee;
+    border: 1px solid #f5c2c7;
+    border-radius: 8px;
+    padding: 2rem;
+    margin-top: 1rem;
+    text-align: center;
+    color: #842029;
+}
+
+    .custom-error-boundary .error-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .custom-error-boundary .error-msg {
+        margin-top: 1rem;
+        font-family: monospace;
+        background: rgba(255,255,255,0.7);
+        padding: 0.5rem;
+        border-radius: 4px;
+        text-align: left;
+        word-break: break-all;
+    }
+
+    .custom-error-boundary .error-stack {
+        text-align: left;
+        font-size: 0.8rem;
+        background: #111;
+        color: #0f0;
+        padding: 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
+    }
+
+@media (prefers-color-scheme: dark) {
+    .custom-error-boundary {
+        background: #450a0a;
+        color: #fca5a5;
+        border-color: #7f1d1d;
+    }
+
+        .custom-error-boundary .error-msg {
+            background: rgba(0,0,0,0.3);
+        }
+}

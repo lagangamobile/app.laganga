@@ -2,7 +2,6 @@
 @using System.Net.Http.Json
 @using com.laganga.app.Shared.Models
 @using com.laganga.app.Shared.Services
-@using DevExpress.Blazor
 @inject NavigationManager Nav
 @inject IAuthenticationService AuthService
 @inject IApiGangaClient apiClient
@@ -50,15 +49,9 @@ else
 
 
                 <div class="actions-inline">
-                    <DxButton Text="Regresar"
-                              ButtonType="ButtonType.Normal"
-                              Click='() => Nav.NavigateTo($"/Bodega/EgresoComprobanteDetalle/{guid}", true)' />
+                    <button type="button" class="btn btn-secondary" @onclick='() => Nav.NavigateTo($"/Bodega/EgresoComprobanteDetalle/{guid}", true)'>Regresar</button>
 
-                    <DxButton Text="Finalizar"
-                              ButtonType="ButtonType.Success"
-                              CssClass="btn-success"
-                              Enabled="@(!isProcessing)"
-                              Click="OpenFinalizeModal" />
+                    <button type="button" class="btn btn-success" disabled="@isProcessing" @onclick="OpenFinalizeModal">Finalizar</button>
                 </div>
             </div>
             @if (!string.IsNullOrWhiteSpace(plateError))
@@ -1368,6 +1361,223 @@ else
 
         .radial-inner {
             inset: 8px;
+        }
+    }
+
+    @@media (prefers-color-scheme: dark) {
+        .page-title {
+            color: #f0f6fc;
+        }
+
+        .status-block.info {
+            background: #1e3a5f;
+            color: #93c5fd;
+        }
+
+        .status-block.error {
+            background: #5f1e1e;
+            color: #fca5a5;
+        }
+
+        .status-block.warn {
+            background: #5c410a;
+            color: #fde047;
+        }
+
+        .top-header {
+            background: var(--dxbl-background, #0d1117);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .progress-info {
+            color: #c9d1d9;
+        }
+
+            .progress-info .muted {
+                color: #8b949e;
+            }
+
+        .progress-bar-outer {
+            background: #30363d;
+        }
+
+        .chip {
+            background: #161b22;
+            border-color: #30363d;
+            color: #c9d1d9;
+        }
+
+        .chip-label {
+            color: #8b949e;
+        }
+
+        .chip-value {
+            color: #f0f6fc;
+        }
+
+        .chip-note {
+            color: #8b949e;
+        }
+
+        .chip.success {
+            background: #1e5f3a;
+            border-color: #2ea043;
+            color: #7ee787;
+        }
+
+        .chip.accent {
+            background: #1f3a5f;
+            border-color: #3182ce;
+            color: #79c0ff;
+        }
+
+        .chip-input {
+            background: #0d1117;
+            border-color: #30363d;
+            color: #f0f6fc;
+        }
+
+        .chip-icon-btn {
+            background: #161b22;
+            border-color: #30363d;
+            color: #c9d1d9;
+        }
+
+            .chip-icon-btn:hover:not(:disabled) {
+                background: #30363d;
+            }
+
+            .chip-icon-btn.success {
+                color: #7ee787;
+                border-color: #2ea043;
+                background: #1e5f3a;
+            }
+
+            .chip-icon-btn.danger {
+                color: #fca5a5;
+                border-color: #da3633;
+                background: #5f1e1e;
+            }
+
+        .items-section {
+            background: var(--dxbl-background, #0d1117);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+        }
+
+        .comp-card {
+            background: #161b22;
+            border-color: #30363d;
+        }
+
+            .comp-card:hover {
+                background: #21262d;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+            }
+
+        .comp-num {
+            color: #5bd0ef;
+        }
+
+        .comp-bod, .comp-dest, .comp-date, .comp-meta {
+            color: #8b949e;
+        }
+
+        .comp-progress .rail {
+            background: #30363d;
+        }
+
+        .comp-progress .meta {
+            color: #8b949e;
+        }
+
+        .modal-card {
+            background: #161b22;
+            color: #f0f6fc;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header, .modal-footer {
+            background: #0d1117;
+            border-color: #30363d;
+        }
+
+        .modal-title {
+            color: #f0f6fc;
+        }
+
+        .modal-close {
+            color: #8b949e;
+        }
+
+            .modal-close:hover {
+                background: #30363d;
+                color: #f0f6fc;
+            }
+
+        .modal-label {
+            color: #8b949e;
+        }
+
+        .modal-text {
+            color: #c9d1d9;
+        }
+
+        .modal-input {
+            background: #0d1117;
+            border-color: #30363d;
+            color: #f0f6fc;
+        }
+
+            .modal-input:focus {
+                border-color: #5bd0ef;
+                box-shadow: 0 0 0 2px rgba(91, 208, 239, 0.25);
+            }
+
+        .btn {
+            background: #21262d;
+            border-color: #30363d;
+            color: #c9d1d9;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #30363d;
+        }
+
+        .btn-primary {
+            background: #0d6efd;
+            border-color: #0d6efd;
+            color: #fff;
+        }
+
+            .btn-primary:hover:not(:disabled) {
+                background: #0a58ca;
+            }
+
+        .btn-success {
+            background: #238636;
+            color: #fff;
+            border-color: #2ea043;
+        }
+
+            .btn-success:hover:not(:disabled) {
+                background: #2ea043;
+            }
+
+        .blocker-card {
+            background: #161b22;
+            color: #f0f6fc;
+        }
+
+        .radial {
+            background: conic-gradient(#5bd0ef calc(var(--p) * 1%), #30363d 0);
+        }
+
+        .radial-inner {
+            background: #161b22;
+        }
+
+        .radial-text {
+            color: #f0f6fc;
         }
     }
 </style>
