@@ -43,6 +43,22 @@
             </div> *@
         </div>
     </div>
+    @{
+    #if DEBUG
+        var esDebug = true;
+    #else
+        var esDebug = false;
+    #endif
+
+    }
+    @if (esDebug)
+    {
+    <div class="mt-4 text-center">
+        <button type="button" class="btn btn-danger" @onclick="GenerarErrorPrueba">
+            Generar Error de Prueba
+        </button>
+    </div>
+    }
 </div>
 
 @code {
@@ -93,6 +109,11 @@
     public void Dispose()
     {
         AuthService.AuthenticationStateChanged -= OnAuthStateChanged;
+    }
+
+    private void GenerarErrorPrueba()
+    {
+        throw new InvalidOperationException("Este es un error simulado para comprobar que el ErrorBoundary funciona correctamente.");
     }
 }
 

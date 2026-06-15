@@ -98,14 +98,14 @@ else
         if (!AuthService.IsAuthenticated && !IsLoginUri(target))
         {
             context.PreventNavigation();
-            NavigationManager.NavigateTo("/loginU", replace: true);
+            NavigationManager.NavigateTo("/loginU",forceLoad: true, replace: true);
             return;
         }
 
         if (AuthService.IsAuthenticated && IsLoginUri(target))
         {
             context.PreventNavigation();
-            NavigationManager.NavigateTo("/", replace: true);
+            NavigationManager.NavigateTo("/", forceLoad: true, replace: true);
             return;
         }
 
@@ -126,12 +126,12 @@ else
         if (AuthService.IsAuthenticated)
         {
             if (IsLoginUri(NavigationManager.Uri))
-                NavigationManager.NavigateTo("/", replace: true);
+                NavigationManager.NavigateTo("/", forceLoad: true, replace: true);
         }
         else
         {
             if (!IsLoginUri(NavigationManager.Uri))
-                NavigationManager.NavigateTo("/loginU", replace: true);
+                NavigationManager.NavigateTo("/loginU", forceLoad: true, replace: true);
         }
     }
 

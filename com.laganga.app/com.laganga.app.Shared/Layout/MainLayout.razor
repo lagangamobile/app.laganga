@@ -66,7 +66,44 @@
                     <main class="main-wrapper">
                         <article class="content px-4 scroll-content page-custom-radius-bg">
                             <com.laganga.app.Shared.Pages.ConnectivityBanner />
-                            @Body
+                            @* @Body *@
+
+
+                            <ErrorBoundary @ref="errorBoundary">
+                                <ChildContent>
+                                    @Body
+                                </ChildContent>
+                                <ErrorContent Context="exception">
+                                    <div class="custom-error-boundary">
+                                        <div class="error-icon">⚠️</div>
+                                        <h3>Ha ocurrido un error inesperado</h3>
+                                        <p class="error-msg"><strong>Detalle:</strong> @exception.Message</p>
+                                        <p class="error-hint">Por favor, intenta recargar la vista o comunícate con soporte si el problema persiste.</p>
+                                        <button class="btn btn-primary mt-3" @onclick="Recover">Recargar vista</button>
+
+                                        @* Opcional: Mostrar el stack trace colapsable solo en desarrollo *@
+                                        
+                                        @{
+                                        #if DEBUG
+                                            var esDebug = true;
+                                        #else
+                                            var esDebug = false;
+                                        #endif
+
+                                        }
+                                        @if (esDebug)
+                                        {
+                                        <details class="error-stack mt-3">
+                                            <summary>Ver detalles técnicos</summary>
+                                            <pre style="white-space: pre-wrap; word-break: break-word; overflow-x: auto;">
+                                                @exception.StackTrace
+                                            </pre>
+                                        </details>
+                                        }
+                                    </div>
+                                </ErrorContent>
+                            </ErrorBoundary>
+
                         </article>
                     </main>
                 </div>
@@ -86,6 +123,7 @@
     public string Title { get; set; }
 
     private bool _isHome;
+    private ErrorBoundary? errorBoundary;
 
     protected override void OnInitialized()
     {
@@ -93,6 +131,16 @@
         LayoutService.StateChanged += OnLayoutStateChanged;
         NavigationManager.LocationChanged += OnLocationChanged;
         EvaluateRoute(NavigationManager.Uri);
+    }
+
+    private void Recover()
+    {
+        errorBoundary?.Recover();
+    }
+
+    protected override void OnParametersSet()
+    {
+        errorBoundary?.Recover();
     }
 
     void OnDrawerStateChanged() => InvokeAsync(StateHasChanged);
@@ -115,7 +163,19 @@
 
     void CloseInfo() => LayoutService.CloseDrawer();
 
-    async Task GoBack() => await JS.InvokeVoidAsync("history.back");
+    async Task GoBack()
+    {
+        var current = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+
+        if (LayoutService.ShouldBackToHome(current))
+        {
+            LayoutService.ClearMenuNavigationMark();
+            NavigationManager.NavigateTo("/", replace: true);
+            return;
+        }
+
+        await JS.InvokeVoidAsync("history.back");
+    }
 
     public void Dispose()
     {

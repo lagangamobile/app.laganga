@@ -87,6 +87,7 @@
             <div class="comprobantes-wrapper">
                 <div class="filters-row">
                     <input type="text"
+                           id="txtBusquedaCompte"
                            class="form-control form-control-sm manual-input"
                            placeholder="Buscar por #, bodega o destinatario"
                            aria-label="Buscar comprobante"
@@ -138,27 +139,25 @@
                         Detalles del comprobante (@(compSel.Detalles?.Sum(d => d.CantidadIngresada) ?? 0)/@(compSel.Detalles?.Sum(d => d.Cantidad) ?? 0))
                     </summary>
                     <div class="accordion-content">
-                        <table class="table table-sm detalles-grid">
-                            <thead>
-                                <tr>
-                                    <th style="width:85px">Artículo</th>
-                                    <th>Descripción</th>
-                                    <th style="width:40px">Cant</th>
-                                    <th style="width:40px">Ing</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var d in compSel.Detalles ?? Enumerable.Empty<DetalleMovimiento>())
-                                {
-                                    <tr class="@(d == selectedDetalle ? "table-active" : "")" @onclick="() => OnDetalleRowClick(d)" style="cursor:pointer">
-                                        <td>@d.CodigoItem</td>
-                                        <td>@d.Descripcion</td>
-                                        <td>@d.Cantidad</td>
-                                        <td>@d.CantidadIngresada</td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
+                        <div class="summary-panel">
+                            <div class="summary-grid summary-grid-header">
+                                <div class="summary-col-code">Artículo</div>
+                                <div class="summary-col-desc">Descripción</div>
+                                <div class="summary-col-qty">Cant</div>
+                                <div class="summary-col-qty">Ing</div>
+                            </div>
+                            @foreach (var d in compSel.Detalles ?? Enumerable.Empty<DetalleMovimiento>())
+                            {
+                                <div class="summary-grid summary-grid-row @(d == selectedDetalle ? "table-active" : "")"
+                                     @onclick="() => OnDetalleRowClick(d)"
+                                     style="cursor:pointer">
+                                    <div class="summary-col-code summary-code-value">@d.CodigoItem</div>
+                                    <div class="summary-col-desc summary-desc-value">@d.Descripcion</div>
+                                    <div class="summary-col-qty summary-qty-value">@d.Cantidad</div>
+                                    <div class="summary-col-qty summary-qty-value">@d.CantidadIngresada</div>
+                                </div>
+                            }
+                        </div>
                     </div>
                 </details>
             }
@@ -278,6 +277,7 @@
     private ElementReference txtSerieCapturaRef;
 
     private bool _pendingInitialFocus;
+    private bool _pendingFocusCodigo;
     private string? _pendingScrollCompteKey;
 
     private OrigenMovimiento? item;
@@ -448,8 +448,6 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        //DESACTIVADO POR PRUEBAS -- REACTIVAR SI ES NECESAIRO
-
         if (firstRender)
         {
             try
@@ -461,8 +459,14 @@
 
         if (_pendingInitialFocus && !isLoading)
         {
-            await FocusCodigoCapturaAsync();
             _pendingInitialFocus = false;
+            await FocusCodigoCapturaAsync();
+        }
+
+        if (_pendingFocusCodigo)
+        {
+            _pendingFocusCodigo = false;
+            await FocusCodigoCapturaAsync();
         }
 
         if (!string.IsNullOrEmpty(_pendingScrollCompteKey))
@@ -511,9 +515,15 @@
     }
 
 
-    private void OnDetalleRowClick(DetalleMovimiento detalle)
+    private async Task OnDetalleRowClick(DetalleMovimiento detalle)
     {
         selectedDetalle = detalle;
+        codigoItemIngresado = detalle.CodigoItem;
+        articuloDescripcion = detalle.Descripcion;
+        codigoValido = true;
+        serieIngresada = "";
+        await FocusSerieCapturaAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     async Task SeleccionarCompte(string compte)
@@ -549,7 +559,7 @@
 
     private async Task HandleCodigoItemCaptura(KeyboardEventArgs e)
     {
-        if (e.Key is "Enter" or "NumpadEnter")
+        if (e.Key is "Enter" or "NumpadEnter" or "Tab")
         {
             await Task.Delay(50);
             _codigoItemIngresado = codigoItemIngresado?.Trim() ?? string.Empty;
@@ -559,7 +569,7 @@
 
     private async Task HandleSerieCaptura(KeyboardEventArgs e)
     {
-        if (e.Key is "Enter" or "NumpadEnter")
+        if (e.Key is "Enter" or "NumpadEnter" or "Tab")
         {
             await Task.Delay(50);
             serieIngresada = serieIngresada?.Trim() ?? string.Empty;
@@ -682,10 +692,12 @@
             return;
         }
 
-        serieIngresada = "";
-        productoNoEncontradoMessage = "";
-        await FocusSerieCapturaAsync();
-        StateHasChanged();
+        //2026-06-09: Raul pide cambiar que se limpie todo
+        // serieIngresada = "";
+        // productoNoEncontradoMessage = "";
+        // await FocusSerieCapturaAsync();
+        //StateHasChanged();
+        await ResetCapturaActual();
     }
 
     private async Task<bool> RemoveSerie(string serie)
@@ -712,16 +724,25 @@
         return true;
     }
 
-    private async Task ResetCapturaActual()
+    private Task ResetCapturaActual()
     {
-        serieIngresada = "";
-        codigoItemIngresado = "";
-        articuloDescripcion = "";
-        selectedDetalle = null;
-        productoNoEncontradoMessage = "";
-        codigoValido = false;
-        await FocusCodigoCapturaAsync();
+        _inReset = true;
+        try
+        {
+            serieIngresada = "";
+            _codigoItemIngresado = "";
+            articuloDescripcion = "";
+            selectedDetalle = null;
+            productoNoEncontradoMessage = "";
+            codigoValido = false;
+            _pendingFocusCodigo = true;
+        }
+        finally
+        {
+            _inReset = false;
+        }
         StateHasChanged();
+        return Task.CompletedTask;
     }
 
     private int ExpectedSeriesFor(DetalleMovimiento? d)
@@ -744,16 +765,23 @@
     {
         datosCambiados = false;
         await SessionStorage.SetItemAsync($"{guid}-OrigenMovimientoDespacho", item);
-        Nav.NavigateTo($"/Bodega/EgresoComprobanteResumen/{guid}");
+        Nav.NavigateTo($"/Bodega/EgresoComprobanteResumen/{guid}",true);
     }
 
     private async Task FocusCodigoCapturaAsync()
     {
         try
         {
-            await JS.InvokeVoidAsync("focusElementById", "txtCodigoCaptura");
+            await JS.InvokeVoidAsync("focusAndCenterById", "txtCodigoCaptura");
         }
-        catch { }
+        catch
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("focusElementById", "txtCodigoCaptura");
+            }
+            catch { }
+        }
     }
 
     private async Task FocusSerieCapturaAsync()
@@ -1539,24 +1567,74 @@
     .accordion-content {
         padding: .6rem .6rem .8rem;
         background: var(--dxbl-background, #fff);
-        overflow-x: auto;
     }
 
-    /* Tablas responsivas */
-    .table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.8rem;
+    .summary-panel {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.75rem;
+        padding: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
     }
 
-        .table th, .table td {
-            padding: 0.5rem;
-            text-align: left;
-            border-bottom: 1px solid #e6e9ef;
+    .summary-grid {
+        display: grid;
+        grid-template-columns: 1fr 2fr 0.6fr 0.6fr;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .summary-grid-header {
+        font-size: 0.6rem;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding-bottom: 0.35rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .summary-grid-row {
+        font-size: 0.7rem;
+        padding: 0.3rem 0;
+        border-radius: 0.25rem;
+    }
+
+        .summary-grid-row:hover {
+            background-color: rgba(0, 0, 0, 0.02);
         }
 
-    .detalles-grid tbody tr:hover {
-        background-color: rgba(0,0,0,0.02);
+    .summary-col-qty {
+        text-align: right;
+    }
+
+    .summary-code-value {
+        font-weight: 600;
+        color: #000064;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding-right: 0.25rem;
+    }
+
+    .summary-desc-value {
+        color: #64748b;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding-right: 0.25rem;
+    }
+
+    .summary-qty-value {
+        text-align: right;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .table-active {
+        background: rgba(91, 208, 239, 0.15);
     }
 
     .retry-btn {
@@ -1705,13 +1783,29 @@
                 border-color: #5bd0ef;
             }
 
-        .table th, .table td {
-            color: #f0f6fc;
+        .summary-panel {
+            background: #161b22;
             border-color: #30363d;
         }
 
-        .detalles-grid tbody tr:hover {
-            background-color: rgba(255,255,255,0.05);
+        .summary-grid-header {
+            border-color: #30363d;
+        }
+
+        .summary-code-value {
+            color: #5bd0ef;
+        }
+
+        .summary-desc-value {
+            color: #8b949e;
+        }
+
+        .summary-qty-value {
+            color: #f0f6fc;
+        }
+
+        .summary-grid-row:hover {
+            background-color: rgba(255, 255, 255, 0.05);
         }
 
         .table-active {
@@ -1748,6 +1842,47 @@
             .progress-info .muted {
                 color: #8b949e;
             }
+
+        
+        #txtCodigoCaptura,
+        #txtSerieCaptura,
+        #txtBusquedaCompte,
+        #txtCodigoCaptura:hover,
+        #txtSerieCaptura:hover,
+        #txtBusquedaCompte:hover,
+        #txtCodigoCaptura:focus,
+        #txtSerieCaptura:focus,
+        #txtBusquedaCompte:focus,
+        #txtCodigoCaptura:active,
+        #txtSerieCaptura:active,
+        #txtBusquedaCompte:active {
+            background-color: #0d1117 !important;
+            color: #f0f6fc !important;
+            border-color: #30363d !important;
+            caret-color: #f0f6fc;
+        }
+
+            #txtCodigoCaptura:focus,
+            #txtSerieCaptura:focus,
+            #txtBusquedaCompte:focus {
+                box-shadow: 0 0 0 3px rgba(91, 208, 239, 0.2) !important;
+                outline: none;
+            }
+
+            #txtCodigoCaptura:-webkit-autofill,
+            #txtSerieCaptura:-webkit-autofill,
+            #txtBusquedaCompte:-webkit-autofill,
+            #txtCodigoCaptura:-webkit-autofill:hover,
+            #txtSerieCaptura:-webkit-autofill:hover,
+            #txtBusquedaCompte:-webkit-autofill:hover,
+            #txtCodigoCaptura:-webkit-autofill:focus,
+            #txtSerieCaptura:-webkit-autofill:focus,
+            #txtBusquedaCompte:-webkit-autofill:focus {
+                -webkit-text-fill-color: #f0f6fc !important;
+                -webkit-box-shadow: 0 0 0 1000px #0d1117 inset !important;
+                box-shadow: 0 0 0 1000px #0d1117 inset !important;
+                transition: background-color 9999s ease-out 0s;
+            }
     }
 
     @@media (max-width: 640px) {
@@ -1771,6 +1906,37 @@
 
         .comp-card {
             min-width: 170px;
+        }
+
+        .summary-grid {
+            grid-template-columns: 11ch minmax(0, 1fr) minmax(2.6rem, auto) minmax(2.6rem, auto);
+        }
+
+        .summary-col-code,
+        .summary-code-value {
+            min-width: 11ch;
+            max-width: 11ch;
+            white-space: nowrap;
+            overflow: visible;
+            text-overflow: clip;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .summary-col-desc,
+        .summary-desc-value {
+            min-width: 0;
+        }
+
+        .summary-desc-value {
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-height: 1.2;
+            max-height: calc(1.2em * 2);
         }
     }
 </style>

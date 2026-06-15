@@ -395,7 +395,7 @@
         await SessionStorage.SetItemAsync($"{guid}-Tipo", selectedTipo);
         await SessionStorage.SetItemAsync($"{guid}-Secuencia", (string.IsNullOrEmpty(secuencia) ? "0" : secuencia));
 
-        Nav.NavigateTo($"/bodega/toma-serie-detalle/{guid}", true, true);
+        Nav.NavigateTo($"/bodega/toma-serie-detalle/{guid}", true);
     }
 
     public void Dispose()

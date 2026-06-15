@@ -1,6 +1,7 @@
 ﻿@using com.laganga.app.Shared.Models
 @using com.laganga.app.Shared.Services
 @using System.Collections.Generic
+@inject com.laganga.app.Shared.Services.LayoutService LayoutService
 @inject IAuthenticationService AuthService
 @inject IApiGangaClient ApiClient
 @inject NavigationManager NavigationManager
@@ -55,7 +56,8 @@
                                         <li>
                                             <a class="nav-menu-link nav-submenu-link @(IsActive(child.Ruta) ? "active" : "")"
                                                href="@child.Ruta"
-                                               @onclick="() => OnMenuItemClick(child.Ruta)">
+                                               @onclick="() => OnMenuItemClick(child.Ruta)"
+                                               @onclick:preventDefault>
                                                 @if (!string.IsNullOrEmpty(child.Icono))
                                                 {
                                                     <i class="@child.Icono nav-menu-icon"></i>
@@ -73,7 +75,8 @@
                         <li>
                             <a class="nav-menu-link @(IsActive(item.Ruta) ? "active" : "")"
                                href="@item.Ruta"
-                               @onclick="() => OnMenuItemClick(item.Ruta)">
+                               @onclick="() => OnMenuItemClick(item.Ruta)"
+                               @onclick:preventDefault>
                                 @if (!string.IsNullOrEmpty(item.Icono))
                                 {
                                     <i class="@item.Icono nav-menu-icon"></i>
@@ -479,10 +482,14 @@
 
     private void OnMenuItemClick(string? ruta)
     {
-        if (!string.IsNullOrEmpty(ruta) && OnNavigate.HasDelegate)
-        {
+        if (string.IsNullOrEmpty(ruta)) return;
+
+        LayoutService.MarkMenuNavigation(ruta);
+
+        if (OnNavigate.HasDelegate)
             OnNavigate.InvokeAsync();
-        }
+
+        NavigationManager.NavigateTo(ruta, replace: true);
     }
 
     private async void HandleLogout()
